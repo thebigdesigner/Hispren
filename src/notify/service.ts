@@ -1,444 +1,280 @@
 /**
  * NOTIFICATIONS.
  *
- * Three Nigerian realities shape every line of this file:
+ * The heart of this file is the SUPPRESSION LAYER, and it sits at the SEND
+ * boundary — not in the compose screen, not in the automation builder.
  *
- *  1. 160 GSM-7 characters is ONE SMS. A single non-GSM character — a curly
- *     quote pasted from Word, a Yoruba diacritic — drops the limit to 70 and
- *     TRIPLES the cost. A church sending 2,000 members a "160-character"
- *     message with one smart apostrophe in it pays for 6,000 SMS, not 2,000.
+ * That placement is the entire design. A church admin must not be ABLE to
+ * produce a message that reaches someone who opted out, or someone who died,
+ * or a member who has already had four texts this week. Not "should not" —
+ * must not be able to. So the check lives below every path that can create one.
  *
- *  2. DND blocks promotional SMS. Church messages sit right on the
- *     promotional/transactional line. Get the route wrong and a large share of
- *     a congregation silently never hears from you — and the pastor blames the
- *     software, not the NCC.
- *
- *  3. Most people carry two SIMs. If phone 1 fails, try phone 2.
+ * And a suppressed message is never a silent no-op. It is a row, with a reason.
+ * When a pastor says "she never got it", the answer is one query away.
  */
 import { Tx, platformQuery } from "../platform/db";
 import { publish } from "../platform/outbox";
+import { count, render, toGsm7 } from "./gsm";
+import { provider } from "./providers";
 
-// ===========================================================================
-// GSM-7 — the character set that costs 160 instead of 70
-// ===========================================================================
-const GSM7 =
-  "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?" +
-  "¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà";
-const GSM7_EXT = "^{}\\[~]|€";   // these cost TWO characters each
+const QUIET_START = 21;   // 21:00 WAT
+const QUIET_END = 7;      // 07:00 WAT
+const FREQ_CAP = 4;       // per person per week, across EVERY campaign and automation
 
-/** Word's smart quotes and dashes are the #1 cause of a tripled SMS bill. */
-export function normaliseForSms(s: string): string {
-  return s
-    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
-    .replace(/[\u201C\u201D\u201E]/g, '"')
-    .replace(/[\u2013\u2014\u2212]/g, "-")
-    .replace(/\u2026/g, "...")
-    .replace(/\u00A0/g, " ");
-}
+export type Suppression =
+  | "consent" | "deceased" | "no_number" | "bounced"
+  | "quiet_hours" | "frequency_cap" | "dnd_no_route" | "no_credit";
 
-export type SmsCount = {
-  chars: number;
-  encoding: "GSM-7" | "UCS-2";
-  units: number;
-  perUnit: number;
-  offenders: string[];        // the exact characters that broke GSM-7
+export type Candidate = {
+  person_id: string; name: string; first_name: string;
+  phone: string | null; phone_2: string | null;
+  is_deceased: boolean; consent: boolean; suppressed: boolean;
+  recent: number; is_dnd: boolean | null;
 };
-
-export function countSms(raw: string): SmsCount {
-  const s = normaliseForSms(raw);
-  const offenders: string[] = [];
-  let chars = 0;
-  let gsm = true;
-
-  for (const c of s) {
-    if (GSM7.includes(c)) chars += 1;
-    else if (GSM7_EXT.includes(c)) chars += 2;
-    else { gsm = false; if (!offenders.includes(c)) offenders.push(c); }
-  }
-  if (!gsm) chars = [...s].length;   // UCS-2 counts code points
-
-  const single = gsm ? 160 : 70;
-  const multi  = gsm ? 153 : 67;     // concatenated parts lose 7 chars to a header
-  const units  = chars <= single ? 1 : Math.ceil(chars / multi);
-
-  return {
-    chars,
-    encoding: gsm ? "GSM-7" : "UCS-2",
-    units: Math.max(1, units),
-    perUnit: single,
-    offenders,
-  };
-}
-
-// ===========================================================================
-// TEMPLATES
-// ===========================================================================
-export function render(body: string, vars: Record<string, unknown>): string {
-  return body.replace(/\{\{(\w+)\}\}/g, (_, k) =>
-    vars[k] === undefined || vars[k] === null ? "" : String(vars[k]));
-}
-
-// ===========================================================================
-// PROVIDERS
-//
-// An abstraction, NOT a Termii integration. You will switch — on price, on a
-// bad delivery week, on an outage during a Sunday service. Adapters, and a
-// failover chain.
-// ===========================================================================
-export type SendResult = {
-  ok: boolean;
-  ref?: string;
-  error?: string;
-};
-
-export interface SmsProvider {
-  name: string;
-  send(to: string, body: string, senderId: string): Promise<SendResult>;
-}
 
 /**
- * The default. Does EVERYTHING a real provider does except hand the message to
- * MTN — suppression, counting, wallet debit, delivery records, the lot.
- *
- * This exists because sender-ID registration takes weeks. A church can be
- * onboarded, segmented, and rehearsed today, and the day the sender ID lands
- * you flip one setting.
+ * Everyone, with every fact the suppression layer needs, in ONE query.
+ * A 3,000-member campaign must not become 3,000 round-trips.
  */
-export const dryRun: SmsProvider = {
-  name: "dry_run",
-  async send(to) {
-    return { ok: true, ref: `dry-${Date.now()}-${to.slice(-4)}` };
-  },
-};
-
-export const termii: SmsProvider = {
-  name: "termii",
-  async send(to, body, senderId) {
-    const key = process.env.TERMII_API_KEY;
-    if (!key) return { ok: false, error: "TERMII_API_KEY not set" };
-    try {
-      const r = await fetch("https://api.ng.termii.com/api/sms/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to, from: senderId, sms: body,
-          type: "plain",
-          channel: "dnd",          // <- reaches DND-registered numbers. Not optional.
-          api_key: key,
-        }),
-      });
-      const j: any = await r.json();
-      if (!r.ok || j.code !== "ok")
-        return { ok: false, error: j.message ?? `HTTP ${r.status}` };
-      return { ok: true, ref: j.message_id };
-    } catch (e: any) {
-      return { ok: false, error: e.message };
-    }
-  },
-};
-
-export const africasTalking: SmsProvider = {
-  name: "africastalking",
-  async send(to, body, senderId) {
-    const key = process.env.AT_API_KEY, user = process.env.AT_USERNAME;
-    if (!key || !user) return { ok: false, error: "AT credentials not set" };
-    try {
-      const r = await fetch("https://api.africastalking.com/version1/messaging", {
-        method: "POST",
-        headers: {
-          apiKey: key,
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-        },
-        body: new URLSearchParams({ username: user, to, message: body, from: senderId }),
-      });
-      const j: any = await r.json();
-      const rec = j?.SMSMessageData?.Recipients?.[0];
-      if (!rec || rec.statusCode >= 300)
-        return { ok: false, error: rec?.status ?? "send failed" };
-      return { ok: true, ref: rec.messageId };
-    } catch (e: any) {
-      return { ok: false, error: e.message };
-    }
-  },
-};
-
-const PROVIDERS: Record<string, SmsProvider> = {
-  dry_run: dryRun, termii, africastalking: africasTalking,
-};
-
-/** Primary, then fallback. A provider outage on a Sunday morning is not fatal. */
-export async function sendSms(
-  primary: string, to: string, body: string, senderId: string
-): Promise<SendResult & { provider: string }> {
-  const chain = [PROVIDERS[primary] ?? dryRun];
-  if (primary !== "dry_run") {
-    const fb = primary === "termii" ? africasTalking : termii;
-    chain.push(fb);
-  }
-  let last: SendResult = { ok: false, error: "no provider" };
-  for (const p of chain) {
-    const r = await p.send(to, body, senderId);
-    if (r.ok) return { ...r, provider: p.name };
-    last = r;
-  }
-  return { ...last, provider: chain[chain.length - 1].name };
-}
-
-// ===========================================================================
-// THE SUPPRESSION LAYER
-//
-// This is the most important code in the file, and it lives BELOW the composer
-// on purpose: an admin must not be *able* to build a send that violates it.
-//
-// Order matters. Deceased first — nothing is worse than texting a widow's
-// husband "we've missed you at church!"
-// ===========================================================================
-export type Target = {
-  person_id: string;
-  name: string;
-  phone: string | null;
-  phone_2: string | null;
-  email: string | null;
-  is_deceased: boolean;
-  consent: boolean;
-  weekly_count: number;
-};
-
-export type Screened = {
-  person_id: string;
-  address: string | null;
-  used_fallback: boolean;
-  suppressed: null | "consent" | "deceased" | "frequency_cap" | "quiet_hours" | "no_number" | "bounced";
-};
-
-export function screen(
-  t: Target,
-  channel: string,
-  opts: { weeklyCap: number; quietHours: boolean; bounced: Set<string> }
-): Screened {
-  // 1. Deceased. Permanent, unconditional, no override anywhere in the product.
-  if (t.is_deceased)
-    return { person_id: t.person_id, address: null, used_fallback: false, suppressed: "deceased" };
-
-  // 2. Consent. NDPR. Not a preference — a legal basis.
-  if (!t.consent)
-    return { person_id: t.person_id, address: null, used_fallback: false, suppressed: "consent" };
-
-  // 3. Quiet hours. Nobody gets a church SMS at 3am.
-  if (opts.quietHours)
-    return { person_id: t.person_id, address: null, used_fallback: false, suppressed: "quiet_hours" };
-
-  // 4. Frequency cap — GLOBAL, across every campaign and every workflow.
-  //    Without this, three "reasonable" senders produce eleven texts in a week
-  //    and the member blocks the church's number.
-  if (t.weekly_count >= opts.weeklyCap)
-    return { person_id: t.person_id, address: null, used_fallback: false, suppressed: "frequency_cap" };
-
-  // 5. Pick an address. TWO SIMs — fall back to phone 2.
-  let address: string | null = null, fallback = false;
-  if (channel === "email") {
-    address = t.email;
-  } else {
-    if (t.phone && !opts.bounced.has(t.phone)) address = t.phone;
-    else if (t.phone_2 && !opts.bounced.has(t.phone_2)) { address = t.phone_2; fallback = true; }
-    else if (t.phone || t.phone_2)
-      return { person_id: t.person_id, address: null, used_fallback: false, suppressed: "bounced" };
-  }
-  if (!address)
-    return { person_id: t.person_id, address: null, used_fallback: false, suppressed: "no_number" };
-
-  return { person_id: t.person_id, address, used_fallback: fallback, suppressed: null };
-}
-
-// ===========================================================================
-// COMPOSE — screen everyone, cost it, and show the church BEFORE they send
-// ===========================================================================
-export async function targetsFor(tx: Tx, segmentId?: string, personIds?: string[]) {
-  const where = segmentId
-    ? `p.id IN (SELECT person_id FROM eval_segment($1))`
-    : `p.id = ANY($1::uuid[])`;
-  const arg = segmentId ? segmentId : personIds ?? [];
-
+export async function candidates(tx: Tx, personIds?: string[]): Promise<Candidate[]> {
+  const filter = personIds && personIds.length ? `AND p.id = ANY($1::uuid[])` : "";
   const { rows } = await tx.query(
     `SELECT p.id AS person_id,
             trim(coalesce(p.first_name,'')||' '||coalesce(p.last_name,'')) AS name,
-            p.first_name, p.phone, p.phone_2, p.email, p.is_deceased, p.usual_service,
-            coalesce((SELECT c.status = 'granted' FROM consents c
-                       WHERE c.person_id = p.id AND c.channel = $2), true) AS consent,
-            messages_this_week(p.id) AS weekly_count
+            coalesce(p.first_name,'') AS first_name,
+            p.phone, p.phone_2, p.is_deceased,
+            coalesce(c.status,'granted') <> 'revoked' AS consent,
+            EXISTS (SELECT 1 FROM suppressions s
+                     WHERE s.address IN (p.phone, p.phone_2) AND s.channel='sms') AS suppressed,
+            messages_in_window(p.id, 7) AS recent,
+            d.is_dnd
        FROM persons p
-      WHERE ${where} AND p.archived_at IS NULL`,
-    [arg, "sms"]);
+       LEFT JOIN consents c   ON c.person_id = p.id AND c.channel = 'sms'
+       LEFT JOIN dnd_status d ON d.phone = coalesce(p.phone, p.phone_2)
+      WHERE p.archived_at IS NULL ${filter}`,
+    personIds && personIds.length ? [personIds] : []);
   return rows;
 }
 
-export async function compose(
-  tx: Tx,
-  o: { channel: string; body: string; subject?: string; segment_id?: string;
-       person_ids?: string[]; template_id?: string; userId: string }
-) {
-  const t = await tx.query(
-    `SELECT name, sender_id, quiet_from, quiet_to, weekly_cap, sms_provider, timezone
-       FROM tenants WHERE id = current_tenant_id()`);
-  const cfg = t.rows[0];
+/**
+ * Decide, per person, whether this may go — and if not, exactly why.
+ * Nothing is sent here. This produces the DECISION, and the decision is stored.
+ */
+export function decide(
+  c: Candidate,
+  opts: { hasDndRoute: boolean; now?: Date; ignoreQuietHours?: boolean }
+): { send: boolean; reason?: Suppression; to?: string; route?: "generic" | "dnd" } {
 
-  const b = await tx.query(
-    `SELECT address FROM suppressions WHERE channel = $1`, [o.channel]);
-  const bounced = new Set<string>(b.rows.map((r: any) => r.address));
+  // A "we missed you!" text to someone who died last week is damage no feature repays.
+  if (c.is_deceased) return { send: false, reason: "deceased" };
 
-  const now = new Date();
-  const hh = now.getUTCHours() + 1;                      // WAT = UTC+1, no DST
-  const qf = Number(String(cfg.quiet_from).slice(0, 2));
-  const qt = Number(String(cfg.quiet_to).slice(0, 2));
-  const quiet = qf > qt ? (hh >= qf || hh < qt) : (hh >= qf && hh < qt);
+  // NDPR. Not a preference — a lawful basis.
+  if (!c.consent) return { send: false, reason: "consent" };
 
-  const targets = await targetsFor(tx, o.segment_id, o.person_ids);
-  const screened = targets.map((x: any) =>
-    ({ ...screen(x, o.channel, { weeklyCap: cfg.weekly_cap, quietHours: quiet, bounced }),
-       first_name: x.first_name, service: x.usual_service }));
+  // STOP reply, hard bounce, dead number.
+  if (c.suppressed) return { send: false, reason: "bounced" };
 
-  const count = countSms(o.body);
-  const sendable = screened.filter((s) => !s.suppressed);
-  const cost = o.channel === "sms" ? sendable.length * count.units * 4.5 : 0;
+  // Two SIMs is the Nigerian norm. Try the second before giving up on them.
+  const to = c.phone || c.phone_2;
+  if (!to) return { send: false, reason: "no_number" };
 
-  const m = await tx.query(
-    `INSERT INTO messages (tenant_id, channel, subject, body, template_id, segment_id,
-        status, units_each, encoding, total_targets, suppressed, estimated_cost, created_by)
-     VALUES (current_tenant_id(),$1,$2,$3,$4,$5,'draft',$6,$7,$8,$9,$10,$11)
-     RETURNING *`,
-    [o.channel, o.subject ?? null, o.body, o.template_id ?? null, o.segment_id ?? null,
-     count.units, count.encoding, targets.length,
-     screened.length - sendable.length, cost, o.userId]);
-  const msg = m.rows[0];
+  // Nobody should get five texts in a week from four automations that do not
+  // know about each other. The cap is global, across everything.
+  if (c.recent >= FREQ_CAP) return { send: false, reason: "frequency_cap" };
 
-  for (const s of screened) {
-    await tx.query(
-      `INSERT INTO message_recipients
-         (tenant_id, message_id, person_id, address, used_fallback, status,
-          suppressed_reason, units)
-       VALUES (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7)`,
-      [msg.id, s.person_id, s.address, s.used_fallback,
-       s.suppressed ? "suppressed" : "pending", s.suppressed, count.units]);
+  const now = opts.now ?? new Date();
+  const hour = Number(now.toLocaleString("en-GB",
+    { timeZone: "Africa/Lagos", hour: "2-digit", hour12: false }));
+  const quiet = hour >= QUIET_START || hour < QUIET_END;
+
+  // A DND-registered number CANNOT be reached on the generic route. At all.
+  // Not "less reliably" — not at all. Without the DND route, this person is
+  // unreachable by SMS, and the church needs to know that.
+  if (c.is_dnd) {
+    if (!opts.hasDndRoute) return { send: false, reason: "dnd_no_route" };
+    return { send: true, to, route: "dnd" };   // the DND route has no time limit
   }
 
-  return {
-    message: msg,
-    count,
-    sendable: sendable.length,
-    suppressed: screened.length - sendable.length,
-    breakdown: screened.reduce((a: any, s) => {
-      if (s.suppressed) a[s.suppressed] = (a[s.suppressed] ?? 0) + 1;
-      return a;
-    }, {}),
-    cost,
-  };
+  // On the generic route this is not our policy — it is MTN's. They refuse
+  // delivery 8pm–8am. Sending anyway means it silently vanishes.
+  if (quiet && !opts.ignoreQuietHours) return { send: false, reason: "quiet_hours" };
+
+  return { send: true, to, route: opts.hasDndRoute ? "dnd" : "generic" };
 }
 
-// ===========================================================================
-// SEND — debit the wallet FIRST. A church must never run into SMS debt.
-// ===========================================================================
-export async function send(tx: Tx, messageId: string) {
-  const m = await tx.query(
-    `SELECT m.*, t.sender_id, t.sms_provider, t.name AS church
-       FROM messages m JOIN tenants t ON t.id = m.tenant_id
-      WHERE m.id = $1 AND m.status = 'draft'`, [messageId]);
-  if (!m.rows[0]) throw new Error("message not found, or already sent");
-  const msg = m.rows[0];
-
-  const pend = await tx.query(
-    `SELECT r.id, r.person_id, r.address, r.units, p.first_name, p.usual_service
-       FROM message_recipients r JOIN persons p ON p.id = r.person_id
-      WHERE r.message_id = $1 AND r.status = 'pending'`, [messageId]);
-
-  const units = pend.rows.reduce((a: number, r: any) => a + r.units, 0);
-
-  if (msg.channel === "sms" && units > 0) {
-    const w = await tx.query(
-      `UPDATE credit_wallets SET balance = balance - $2, updated_at = now()
-        WHERE tenant_id = current_tenant_id() AND credit_type = 'sms'
-          AND balance >= $2
-       RETURNING balance`, [messageId, units]);
-    if (!w.rows[0]) {
-      await tx.query(
-        `UPDATE message_recipients SET status='suppressed', suppressed_reason='no_credit'
-          WHERE message_id=$1 AND status='pending'`, [messageId]);
-      await tx.query(`UPDATE messages SET status='failed' WHERE id=$1`, [messageId]);
-      throw new Error("not_enough_sms_credit");
-    }
-    await tx.query(
-      `INSERT INTO credit_ledger (tenant_id, credit_type, delta, reason)
-       VALUES (current_tenant_id(),'sms',$1,$2)`, [-units, `send:${messageId}`]);
-  }
-
-  await tx.query(`UPDATE messages SET status='sending' WHERE id=$1`, [messageId]);
-  await publish(tx, {
-    type: "message.queued", entityType: "message", entityId: messageId,
-    payload: { channel: msg.channel, recipients: pend.rows.length },
-  });
-
-  return { queued: pend.rows.length, units };
-}
-
-/** Run by the worker. Actually hits the provider. */
-export async function deliver(messageId: string) {
-  const m = await platformQuery<any>(
-    `SELECT m.*, t.sender_id, t.sms_provider, t.name AS church
-       FROM messages m JOIN tenants t ON t.id = m.tenant_id WHERE m.id = $1`, [messageId]);
-  if (!m.rows[0]) return;
-  const msg = m.rows[0];
-
-  const rec = await platformQuery<any>(
-    `SELECT r.id, r.address, p.first_name, p.usual_service
-       FROM message_recipients r JOIN persons p ON p.id = r.person_id
-      WHERE r.message_id = $1 AND r.status = 'pending'`, [messageId]);
-
-  let sent = 0, failed = 0;
-  for (const r of rec.rows) {
-    const body = render(normaliseForSms(msg.body), {
-      first_name: r.first_name, church: msg.church, service: r.usual_service,
-    });
-    const res = await sendSms(
-      msg.sms_provider, r.address, body, msg.sender_id ?? "Church");
-
-    if (res.ok) {
-      sent++;
-      await platformQuery(
-        `UPDATE message_recipients SET status='sent', provider=$2, provider_ref=$3,
-                sent_at=now() WHERE id=$1`, [r.id, res.provider, res.ref]);
-    } else {
-      failed++;
-      await platformQuery(
-        `UPDATE message_recipients SET status='failed', provider=$2, error=$3
-          WHERE id=$1`, [r.id, res.provider, res.error]);
-    }
-  }
-
-  await platformQuery(
-    `UPDATE messages SET status=$2, sent_count=$3, failed_count=$4, sent_at=now()
-      WHERE id=$1`,
-    [messageId, failed && !sent ? "failed" : "sent", sent, failed]);
-  return { sent, failed };
+export async function senderFor(tx: Tx): Promise<{ id: string | null; dnd: boolean }> {
+  const { rows } = await tx.query(
+    `SELECT sender_id, dnd_approved FROM sender_ids
+      WHERE status = 'active' ORDER BY is_default DESC, approved_at LIMIT 1`);
+  if (!rows[0]) return { id: null, dnd: false };
+  return { id: rows[0].sender_id, dnd: rows[0].dnd_approved };
 }
 
 /**
- * Delivery webhook. The provider tells us it actually landed — or bounced.
- * A hard bounce is suppressed, or you burn credits on that number every week.
+ * Compose: who gets it, who does not and why, what it costs — and write ALL of
+ * it down BEFORE a single message leaves. The pastor sees the whole picture,
+ * then presses send. Or does not.
  */
-export async function receipt(ref: string, status: string) {
-  const r = await platformQuery<any>(
-    `UPDATE message_recipients
-        SET status = CASE WHEN $2 IN ('delivered','DELIVERED') THEN 'delivered'
-                          ELSE 'failed' END,
-            delivered_at = CASE WHEN $2 IN ('delivered','DELIVERED') THEN now() END
-      WHERE provider_ref = $1
-      RETURNING tenant_id, address, status`, [ref, status]);
-  const row = r.rows[0];
-  if (row && row.status === "failed" && row.address) {
-    await platformQuery(
-      `INSERT INTO suppressions (tenant_id, address, channel, reason)
-       VALUES ($1,$2,'sms','hard_bounce') ON CONFLICT DO NOTHING`,
-      [row.tenant_id, row.address]);
+export async function prepare(
+  tx: Tx,
+  opts: { name: string; body: string; personIds?: string[]; userId: string;
+          templateId?: string | null; ignoreQuietHours?: boolean }
+) {
+  const sender = await senderFor(tx);
+  const people = await candidates(tx, opts.personIds);
+  const t = await tx.query(`SELECT name FROM tenants WHERE id = current_tenant_id()`);
+  const church = t.rows[0]?.name ?? "";
+
+  // Normalise BEFORE counting. One curly apostrophe from Word turns a
+  // 160-character message into a 70-character one and doubles the bill.
+  const body = toGsm7(opts.body);
+
+  const camp = await tx.query(
+    `INSERT INTO campaigns (tenant_id, name, body, template_id, created_by, status)
+     VALUES (current_tenant_id(), $1, $2, $3, $4, 'draft') RETURNING id`,
+    [opts.name, body, opts.templateId ?? null, opts.userId]);
+  const campaignId = camp.rows[0].id;
+
+  let queued = 0, suppressed = 0, units = 0;
+  const reasons: Record<string, number> = {};
+
+  for (const p of people) {
+    const rendered = render(body, { first_name: p.first_name, church, name: p.name });
+    const k = count(rendered);
+    const d = decide(p, { hasDndRoute: sender.dnd, ignoreQuietHours: opts.ignoreQuietHours });
+
+    if (!d.send) {
+      suppressed++;
+      reasons[d.reason!] = (reasons[d.reason!] ?? 0) + 1;
+      await tx.query(
+        `INSERT INTO messages (tenant_id, campaign_id, person_id, channel, to_address,
+           body, units, encoding, status, suppressed_by)
+         VALUES (current_tenant_id(),$1,$2,'sms',$3,$4,$5,$6,'suppressed',$7)`,
+        [campaignId, p.person_id, p.phone || p.phone_2 || '-', rendered,
+         k.units, k.encoding, d.reason]);
+      continue;
+    }
+
+    queued++; units += k.units;
+    await tx.query(
+      `INSERT INTO messages (tenant_id, campaign_id, person_id, channel, to_address,
+         sender_id, body, units, encoding, route, status)
+       VALUES (current_tenant_id(),$1,$2,'sms',$3,$4,$5,$6,$7,$8,'queued')`,
+      [campaignId, p.person_id, d.to, sender.id, rendered, k.units, k.encoding, d.route]);
   }
-  return row ?? null;
+
+  await tx.query(
+    `UPDATE campaigns SET recipients=$2, suppressed=$3, queued=$4, units=$5 WHERE id=$1`,
+    [campaignId, people.length, suppressed, queued, units]);
+
+  return {
+    campaign_id: campaignId,
+    sender_id: sender.id,
+    has_dnd_route: sender.dnd,
+    recipients: people.length,
+    queued, suppressed, units, reasons,
+    counted: count(render(body, { first_name: "Chinedu", church })),
+    sample: render(body, { first_name: people[0]?.first_name ?? "Chinedu", church }),
+  };
+}
+
+/** Charge the wallet, then hand the queue to the worker. */
+export async function dispatch(tx: Tx, campaignId: string, unitPrice = 4.5) {
+  const c = await tx.query(
+    `SELECT queued, units, status FROM campaigns WHERE id = $1`, [campaignId]);
+  if (!c.rows[0]) throw new Error("campaign not found");
+  if (c.rows[0].status !== "draft") throw new Error("this campaign has already been sent");
+
+  const cost = Number(c.rows[0].units) * unitPrice;
+
+  // A church must never go into SMS debt. The wallet's CHECK (balance >= 0)
+  // refuses at the database level, so this fails loudly instead of quietly.
+  let balance: number | null = null;
+  try {
+    const w = await tx.query(
+      `UPDATE credit_wallets SET balance = balance - $1, updated_at = now()
+        WHERE tenant_id = current_tenant_id() AND credit_type = 'sms'
+        RETURNING balance`, [cost]);
+    balance = w.rows[0] ? Number(w.rows[0].balance) : null;
+  } catch { balance = null; }
+
+  if (balance === null) {
+    await tx.query(
+      `UPDATE messages SET status='suppressed', suppressed_by='no_credit'
+        WHERE campaign_id=$1 AND status='queued'`, [campaignId]);
+    await tx.query(`UPDATE campaigns SET status='failed' WHERE id=$1`, [campaignId]);
+    throw new Error(`Not enough SMS credit. This campaign needs ${cost.toFixed(2)} units.`);
+  }
+
+  await tx.query(
+    `INSERT INTO credit_ledger (tenant_id, credit_type, delta, reason)
+     VALUES (current_tenant_id(), 'sms', $1, $2)`, [-cost, `campaign:${campaignId}`]);
+  await tx.query(
+    `UPDATE campaigns SET status='queued', cost=$2, sent_at=now() WHERE id=$1`,
+    [campaignId, cost]);
+  await publish(tx, { type: "campaign.queued", entityType: "campaign",
+    entityId: campaignId, payload: { units: c.rows[0].units, cost } });
+
+  return { queued: c.rows[0].queued, units: c.rows[0].units, cost, balance };
+}
+
+// ---------------------------------------------------------------------------
+// WORKER SIDE — drains the queue across every tenant
+// ---------------------------------------------------------------------------
+export async function drainQueue(batch = 50) {
+  const p = provider();
+  const { rows } = await platformQuery<any>(
+    `SELECT id, to_address, sender_id, body, route FROM messages
+      WHERE status = 'queued' ORDER BY queued_at LIMIT $1`, [batch]);
+
+  for (const m of rows) {
+    const r = await p.send(m.to_address, m.sender_id ?? "Hispren", m.body,
+                           (m.route ?? "generic") as any);
+    await platformQuery(
+      `UPDATE messages SET status=$2, provider=$3, provider_id=$4, error=$5,
+              cost=coalesce($6, cost), sent_at=now() WHERE id=$1`,
+      [m.id, r.ok ? "sent" : "failed", p.name, r.providerId ?? null,
+       r.error ?? null, r.cost ?? null]);
+  }
+  return rows.length;
+}
+
+/** Nightly. Checking DND costs an API call — cache it, it changes rarely. */
+export async function refreshDnd(limit = 200) {
+  const p = provider();
+  if (!p.checkDnd) return 0;
+  const { rows } = await platformQuery<any>(
+    `SELECT DISTINCT coalesce(p.phone, p.phone_2) AS phone
+       FROM persons p
+       LEFT JOIN dnd_status d ON d.phone = coalesce(p.phone, p.phone_2)
+      WHERE coalesce(p.phone, p.phone_2) IS NOT NULL AND p.archived_at IS NULL
+        AND (d.phone IS NULL OR d.checked_at < now() - interval '30 days')
+      LIMIT $1`, [limit]);
+  for (const r of rows) {
+    const s = await p.checkDnd(r.phone);
+    await platformQuery(
+      `INSERT INTO dnd_status (phone, is_dnd, network, checked_at) VALUES ($1,$2,$3,now())
+       ON CONFLICT (phone) DO UPDATE SET is_dnd=$2, network=$3, checked_at=now()`,
+      [r.phone, s.isDnd, s.network ?? null]);
+  }
+  return rows.length;
+}
+
+/** Inbound STOP. The member has opted out. That is final, and it is instant. */
+export async function handleStop(phone: string) {
+  await platformQuery(
+    `INSERT INTO suppressions (tenant_id, address, channel, reason)
+     SELECT p.tenant_id, $1, 'sms', 'stop_reply' FROM persons p
+      WHERE p.phone = $1 OR p.phone_2 = $1
+     ON CONFLICT DO NOTHING`, [phone]);
+  await platformQuery(
+    `INSERT INTO consents (tenant_id, person_id, channel, status)
+     SELECT p.tenant_id, p.id, 'sms', 'revoked' FROM persons p
+      WHERE p.phone = $1 OR p.phone_2 = $1
+     ON CONFLICT (tenant_id, person_id, channel)
+       DO UPDATE SET status='revoked', updated_at=now()`, [phone]);
+  await platformQuery(
+    `INSERT INTO consent_events (tenant_id, person_id, channel, action, source)
+     SELECT p.tenant_id, p.id, 'sms', 'revoked', 'stop_reply' FROM persons p
+      WHERE p.phone = $1 OR p.phone_2 = $1`, [phone]);
 }

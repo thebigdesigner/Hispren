@@ -1,136 +1,122 @@
 /**
- * REMINDERS — cron, not AI.
+ * REMINDERS — cron jobs, not AI.
  *
- * Birthdays, service reminders, missed-attendance alerts. These are database
- * queries on a schedule. Routing them through a language model would pay tokens
- * for a WHERE clause and introduce hallucination into a feature that must never
+ * Birthdays, service reminders, and missed-attendance alerts are a WHERE clause
+ * and a date. Routing them through an LLM would mean paying tokens for a database
+ * query, and introducing hallucination and latency into features that must never
  * fail.
  *
- * Every one of these composes a DRAFT and stops. A human sends. Always.
- * An automation that autonomously texts "we've missed you at church!" to a
- * member who died last week does damage no feature can repay — and church data
- * is ALWAYS stale.
+ * The engine decides WHEN. The AI (Phase 2) decides what to SAY. Not the reverse.
+ *
+ * Every one of these goes through prepare() — so consent, quiet hours, frequency
+ * caps, DND routing and the deceased flag all apply. A birthday message cannot
+ * reach someone who opted out. The suppression layer has no exceptions.
  */
-import { platformQuery, withTenant } from "../platform/db";
-import { compose } from "./service";
+import { withTenant, platformQuery } from "../platform/db";
+import { prepare, dispatch } from "./service";
 
-async function activeTenants() {
+async function eachTenant(fn: (tenantId: string) => Promise<void>) {
   const { rows } = await platformQuery<{ id: string }>(
     `SELECT id FROM tenants WHERE status IN ('active','trial')`);
-  return rows;
+  for (const t of rows) {
+    try { await fn(t.id); }
+    catch (e: any) { console.error(`reminder failed for tenant ${t.id}:`, e.message); }
+  }
 }
 
-/** Draft a birthday message for everyone whose birthday is today. */
-export async function birthdayReminders() {
-  const today = new Date();
-  const m = today.getMonth() + 1, d = today.getDate();
+/** Birthdays. dob_month / dob_day are generated columns — this is an index scan. */
+export async function runBirthdays() {
+  const now = new Date();
+  const m = now.getMonth() + 1, d = now.getDate();
 
-  for (const t of await activeTenants()) {
-    await withTenant(t.id, async (tx) => {
-      const tpl = await tx.query(
-        `SELECT id, body FROM message_templates
-          WHERE kind = 'birthday' AND archived_at IS NULL LIMIT 1`);
-      if (!tpl.rows[0]) return;
+  await eachTenant(async (tenantId) => {
+    await withTenant(tenantId, async (tx) => {
+      const t = await tx.query(
+        `SELECT id FROM message_templates WHERE key='birthday' AND archived_at IS NULL`);
+      if (!t.rows[0]) return;
+      const body = (await tx.query(
+        `SELECT body FROM message_templates WHERE id=$1`, [t.rows[0].id])).rows[0].body;
 
       const people = await tx.query(
         `SELECT id FROM persons
           WHERE dob_month = $1 AND dob_day = $2
-            AND archived_at IS NULL AND NOT is_deceased
-            AND (phone IS NOT NULL OR phone_2 IS NOT NULL)`, [m, d]);
+            AND archived_at IS NULL AND NOT is_deceased`, [m, d]);
       if (!people.rows.length) return;
 
-      const owner = await tx.query(
-        `SELECT user_id FROM tenant_memberships
-          WHERE tenant_id = current_tenant_id() AND role IN ('owner','admin') LIMIT 1`);
-
-      await compose(tx, {
-        channel: "sms",
-        body: tpl.rows[0].body,
-        template_id: tpl.rows[0].id,
-        person_ids: people.rows.map((r: any) => r.id),
-        userId: owner.rows[0]?.user_id,
+      const p = await prepare(tx, {
+        name: `Birthdays — ${now.toLocaleDateString("en-GB", { day: "numeric", month: "long" })}`,
+        body,
+        personIds: people.rows.map((r: any) => r.id),
+        userId: "00000000-0000-0000-0000-000000000000",
+        templateId: t.rows[0].id,
       });
-      // DRAFT. It sits in Messages waiting for a human to press send.
+      if (p.queued) await dispatch(tx, p.campaign_id).catch(() => {});
+      console.log(`birthdays ${tenantId}: ${p.queued} queued, ${p.suppressed} suppressed`);
     });
-  }
+  });
 }
 
-/** Saturday evening: draft a reminder for tomorrow's service. */
-export async function serviceReminders() {
+/**
+ * Service reminder — the day BEFORE.
+ *
+ * Note the timing problem this exists to dodge: on the GENERIC route, MTN
+ * refuses delivery between 8pm and 8am. A Saturday-evening reminder for Sunday
+ * morning would silently never arrive. So we send in the afternoon.
+ */
+export async function runServiceReminders() {
   const tomorrow = (new Date().getDay() + 1) % 7;
 
-  for (const t of await activeTenants()) {
-    await withTenant(t.id, async (tx) => {
+  await eachTenant(async (tenantId) => {
+    await withTenant(tenantId, async (tx) => {
       const svc = await tx.query(
         `SELECT name FROM services
           WHERE day_of_week = $1 AND archived_at IS NULL AND event_date IS NULL
           ORDER BY position LIMIT 1`, [tomorrow]);
       if (!svc.rows[0]) return;
 
-      const tpl = await tx.query(
+      const t = await tx.query(
         `SELECT id, body FROM message_templates
-          WHERE kind = 'service_reminder' AND archived_at IS NULL LIMIT 1`);
-      if (!tpl.rows[0]) return;
+          WHERE key='service_reminder' AND archived_at IS NULL`);
+      if (!t.rows[0]) return;
 
-      const people = await tx.query(
-        `SELECT id FROM persons
-          WHERE archived_at IS NULL AND NOT is_deceased
-            AND (phone IS NOT NULL OR phone_2 IS NOT NULL)`);
-      if (!people.rows.length) return;
-
-      const owner = await tx.query(
-        `SELECT user_id FROM tenant_memberships
-          WHERE tenant_id = current_tenant_id() AND role IN ('owner','admin') LIMIT 1`);
-
-      await compose(tx, {
-        channel: "sms",
-        body: tpl.rows[0].body,
-        template_id: tpl.rows[0].id,
-        person_ids: people.rows.map((r: any) => r.id),
-        userId: owner.rows[0]?.user_id,
+      const body = t.rows[0].body.replace(/\{\{\s*service\s*\}\}/g, svc.rows[0].name);
+      const p = await prepare(tx, {
+        name: `Reminder — ${svc.rows[0].name}`,
+        body, userId: "00000000-0000-0000-0000-000000000000",
+        templateId: t.rows[0].id,
       });
+      if (p.queued) await dispatch(tx, p.campaign_id).catch(() => {});
+      console.log(`service reminder ${tenantId}: ${p.queued} queued`);
     });
-  }
+  });
 }
 
 /**
- * Missed attendance. THE most valuable automation in the product, and the one
- * most likely to cause harm if it fires blind.
- *
- * A person who came, then stopped, is a person you are losing. A person who
- * never came is not "missing" — they were never yours. The query knows the
- * difference. And it still only DRAFTS.
+ * Missed attendance. They CAME, then stopped — that is the whole point. A
+ * visitor who never returned is not "missing", they were never ours.
  */
-export async function missedAttendanceReminders(weeks = 3) {
-  for (const t of await activeTenants()) {
-    await withTenant(t.id, async (tx) => {
-      const tpl = await tx.query(
+export async function runMissedAttendance(weeks = 3) {
+  await eachTenant(async (tenantId) => {
+    await withTenant(tenantId, async (tx) => {
+      const t = await tx.query(
         `SELECT id, body FROM message_templates
-          WHERE kind = 'missed_attendance' AND archived_at IS NULL LIMIT 1`);
-      if (!tpl.rows[0]) return;
+          WHERE key='missed_you' AND archived_at IS NULL`);
+      if (!t.rows[0]) return;
 
-      const people = await tx.query(`SELECT id FROM at_risk($1)`, [weeks]);
-      if (!people.rows.length) return;
+      const risk = await tx.query(`SELECT id FROM at_risk($1)`, [weeks]);
+      if (!risk.rows.length) return;
 
-      const owner = await tx.query(
-        `SELECT user_id FROM tenant_memberships
-          WHERE tenant_id = current_tenant_id() AND role IN ('owner','admin') LIMIT 1`);
-
-      await compose(tx, {
-        channel: "sms",
-        body: tpl.rows[0].body,
-        template_id: tpl.rows[0].id,
-        person_ids: people.rows.map((r: any) => r.id),
-        userId: owner.rows[0]?.user_id,
+      const p = await prepare(tx, {
+        name: `Missed you — ${weeks}+ weeks away`,
+        body: t.rows[0].body,
+        personIds: risk.rows.map((r: any) => r.id),
+        userId: "00000000-0000-0000-0000-000000000000",
+        templateId: t.rows[0].id,
       });
+      // DO NOT auto-send this one. A "we missed you" text to someone whose
+      // mother just died, or who left the church deliberately, is worse than
+      // silence. It goes to the pastor as a DRAFT. A human presses send.
+      console.log(`missed-attendance ${tenantId}: ${p.queued} drafted for the pastor to approve`);
     });
-  }
-}
-
-/** Sweep uncontacted first-timers into owned, dated follow-up tasks. */
-export async function followUpTasks() {
-  const { generateFollowUps } = await import("../care/service");
-  for (const t of await activeTenants()) {
-    await withTenant(t.id, (tx) => generateFollowUps(tx));
-  }
+  });
 }

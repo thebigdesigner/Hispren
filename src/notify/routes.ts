@@ -1,156 +1,112 @@
 import { FastifyInstance } from "fastify";
 import { authenticate, requireRole, tenantTx } from "../platform/auth";
 import * as n from "./service";
-import { platformQuery } from "../platform/db";
+import { count, toGsm7, render } from "./gsm";
+import { provider } from "./providers";
 
 export function registerNotifyRoutes(app: FastifyInstance) {
   const auth  = { preHandler: [authenticate] };
   const staff = { preHandler: [authenticate, requireRole("staff")] };
   const admin = { preHandler: [authenticate, requireRole("admin")] };
 
-  // ---- the character counter. Live, in the composer, BEFORE they send. -----
-  app.post<{ Body: { body: string } }>("/api/notify/count", auth, async (req) =>
-    n.countSms(req.body.body ?? ""));
-
-  // ---- templates ----------------------------------------------------------
-  app.get("/api/notify/templates", auth, async (req) =>
-    tenantTx(req, async (tx) => (await tx.query(
-      `SELECT * FROM message_templates WHERE archived_at IS NULL ORDER BY kind, name`)).rows));
-
-  app.post<{ Body: any }>("/api/notify/templates", staff, async (req, reply) => {
-    const t = await tenantTx(req, async (tx) => (await tx.query(
-      `INSERT INTO message_templates (tenant_id, name, channel, kind, subject, body)
-       VALUES (current_tenant_id(),$1,$2,$3,$4,$5) RETURNING *`,
-      [req.body.name, req.body.channel ?? "sms", req.body.kind ?? "custom",
-       req.body.subject ?? null, req.body.body])).rows[0]);
-    reply.code(201).send(t);
+  /** Live GSM-7 counter for the composer. This is what stops the church overpaying. */
+  app.post<{ Body: { body: string } }>("/api/notify/count", auth, async (req) => {
+    const raw = req.body.body ?? "";
+    return { raw: count(raw), normalised: count(toGsm7(raw)), fixed: toGsm7(raw) };
   });
 
-  app.patch<{ Params: { id: string }; Body: any }>(
-    "/api/notify/templates/:id", staff, async (req) =>
-      tenantTx(req, async (tx) => (await tx.query(
-        `UPDATE message_templates SET name=coalesce($2,name), body=coalesce($3,body),
-                subject=coalesce($4,subject) WHERE id=$1 RETURNING *`,
-        [req.params.id, req.body.name, req.body.body, req.body.subject])).rows[0]));
-
-  // ---- segments -----------------------------------------------------------
-  app.get("/api/notify/segments", auth, async (req) =>
+  app.get("/api/notify/templates", auth, async (req) =>
     tenantTx(req, async (tx) => (await tx.query(
-      `SELECT s.*, (SELECT count(*)::int FROM eval_segment(s.id)) AS people
-         FROM segments s WHERE s.archived_at IS NULL ORDER BY s.name`)).rows));
+      `SELECT id, key, name, channel, body, is_system FROM message_templates
+        WHERE archived_at IS NULL ORDER BY is_system DESC, name`)).rows));
 
-  app.post<{ Body: { name: string; filter: any } }>(
-    "/api/notify/segments", staff, async (req, reply) => {
+  app.get("/api/notify/sender-ids", auth, async (req) =>
+    tenantTx(req, async (tx) => (await tx.query(
+      `SELECT id, sender_id, status, dnd_approved, is_default FROM sender_ids
+        ORDER BY is_default DESC, requested_at DESC`)).rows));
+
+  app.post<{ Body: { sender_id: string; use_case?: string; dnd_approved?: boolean } }>(
+    "/api/notify/sender-ids", admin, async (req, reply) => {
       const s = await tenantTx(req, async (tx) => (await tx.query(
-        `INSERT INTO segments (tenant_id, name, kind, filter)
-         VALUES (current_tenant_id(),$1,'dynamic',$2) RETURNING *`,
-        [req.body.name, JSON.stringify(req.body.filter ?? {})])).rows[0]);
+        `INSERT INTO sender_ids (tenant_id, sender_id, use_case, status, dnd_approved, is_default)
+         VALUES (current_tenant_id(), $1, $2, 'active', $3,
+                 NOT EXISTS (SELECT 1 FROM sender_ids WHERE tenant_id = current_tenant_id()))
+         ON CONFLICT (tenant_id, sender_id) DO UPDATE
+           SET use_case = $2, dnd_approved = $3
+         RETURNING *`,
+        [req.body.sender_id.slice(0, 11), req.body.use_case ?? null,
+         !!req.body.dnd_approved])).rows[0]);
       reply.code(201).send(s);
     });
 
-  app.delete<{ Params: { id: string } }>("/api/notify/segments/:id", staff, async (req) =>
-    tenantTx(req, async (tx) => {
-      await tx.query(`UPDATE segments SET archived_at=now() WHERE id=$1`, [req.params.id]);
-      return { archived: true };
-    }));
+  /** Compose. Nothing is sent — this shows the pastor exactly what WILL happen. */
+  app.post<{ Body: { name: string; body: string; person_ids?: string[];
+                     template_id?: string; ignore_quiet_hours?: boolean } }>(
+    "/api/notify/prepare", staff, async (req) =>
+      tenantTx(req, (tx) => n.prepare(tx, {
+        name: req.body.name, body: req.body.body,
+        personIds: req.body.person_ids, templateId: req.body.template_id ?? null,
+        userId: req.auth!.userId, ignoreQuietHours: req.body.ignore_quiet_hours,
+      })));
 
-  // ---- compose: screen everyone and cost it BEFORE anything is sent --------
-  app.post<{ Body: any }>("/api/notify/compose", staff, async (req, reply) => {
-    try {
-      return await tenantTx(req, (tx) =>
-        n.compose(tx, { ...req.body, userId: req.auth!.userId }));
-    } catch (e: any) {
-      return reply.code(400).send({ error: "compose_failed", detail: e.message });
-    }
-  });
-
+  /** Send. Charges the wallet and hands the queue to the worker. */
   app.post<{ Params: { id: string } }>("/api/notify/send/:id", admin, async (req, reply) => {
     try {
-      const r = await tenantTx(req, (tx) => n.send(tx, req.params.id));
-      // The worker picks it up from the outbox. If no worker is running, deliver
-      // inline — a church with one Railway service must still be able to send.
-      n.deliver(req.params.id).catch(() => {});
-      return r;
+      return await tenantTx(req, (tx) => n.dispatch(tx, req.params.id));
     } catch (e: any) {
-      if (e.message === "not_enough_sms_credit")
-        return reply.code(402).send({ error: "no_credit",
-          detail: "Not enough SMS credit. Top up before sending." });
-      return reply.code(400).send({ error: "send_failed", detail: e.message });
+      return reply.code(400).send({ error: "cannot_send", detail: e.message });
     }
   });
 
-  app.get("/api/notify/messages", auth, async (req) =>
+  app.get("/api/notify/campaigns", auth, async (req) =>
     tenantTx(req, async (tx) => (await tx.query(
-      `SELECT m.*, s.name AS segment_name
-         FROM messages m LEFT JOIN segments s ON s.id = m.segment_id
-        ORDER BY m.created_at DESC LIMIT 50`)).rows));
+      `SELECT c.*, u.full_name AS by_who FROM campaigns c
+       LEFT JOIN app_users u ON u.id = c.created_by
+       ORDER BY c.created_at DESC LIMIT 50`)).rows));
 
-  /** Why didn't Amaka get it? One word: consent / dnd / frequency_cap / ... */
-  app.get<{ Params: { id: string } }>("/api/notify/messages/:id", auth, async (req) =>
+  /**
+   * The message log — including everything we REFUSED to send, and why.
+   * When a pastor says "she never got it", this is the answer.
+   */
+  app.get<{ Querystring: { campaign_id?: string; status?: string } }>(
+    "/api/notify/messages", auth, async (req) =>
+      tenantTx(req, async (tx) => {
+        const w: string[] = [], p: unknown[] = [];
+        if (req.query.campaign_id) { p.push(req.query.campaign_id); w.push(`m.campaign_id = $${p.length}`); }
+        if (req.query.status)      { p.push(req.query.status);      w.push(`m.status = $${p.length}`); }
+        return (await tx.query(
+          `SELECT m.id, m.to_address, m.body, m.units, m.encoding, m.route, m.status,
+                  m.suppressed_by, m.error, m.queued_at, m.sent_at,
+                  trim(coalesce(p.first_name,'')||' '||coalesce(p.last_name,'')) AS name
+             FROM messages m LEFT JOIN persons p ON p.id = m.person_id
+            ${w.length ? "WHERE " + w.join(" AND ") : ""}
+            ORDER BY m.queued_at DESC LIMIT 300`, p)).rows;
+      }));
+
+  app.get("/api/notify/status", auth, async (req) =>
     tenantTx(req, async (tx) => {
-      const m = (await tx.query(`SELECT * FROM messages WHERE id=$1`, [req.params.id])).rows[0];
-      const r = (await tx.query(
-        `SELECT r.*, trim(coalesce(p.first_name,'')||' '||coalesce(p.last_name,'')) AS name
-           FROM message_recipients r JOIN persons p ON p.id=r.person_id
-          WHERE r.message_id=$1 ORDER BY r.status, name`, [req.params.id])).rows;
-      return { ...m, recipients: r };
+      const s = await n.senderFor(tx);
+      const w = await tx.query(
+        `SELECT balance FROM credit_wallets
+          WHERE tenant_id = current_tenant_id() AND credit_type = 'sms'`);
+      return {
+        provider: provider().name,
+        live: provider().name !== "dry-run",
+        sender_id: s.id,
+        dnd_route: s.dnd,
+        sms_balance: w.rows[0] ? Number(w.rows[0].balance) : 0,
+      };
     }));
 
-  // ---- wallet -------------------------------------------------------------
-  app.get("/api/notify/wallet", auth, async (req) =>
-    tenantTx(req, async (tx) => (await tx.query(
-      `SELECT credit_type, balance FROM credit_wallets`)).rows));
-
-  app.post<{ Body: { credit_type: string; amount: number } }>(
-    "/api/notify/wallet/topup", admin, async (req) =>
-      tenantTx(req, async (tx) => {
-        await tx.query(
-          `INSERT INTO credit_wallets (tenant_id, credit_type, balance)
-           VALUES (current_tenant_id(),$1,$2)
-           ON CONFLICT (tenant_id, credit_type) DO UPDATE
-             SET balance = credit_wallets.balance + $2, updated_at = now()`,
-          [req.body.credit_type, req.body.amount]);
-        await tx.query(
-          `INSERT INTO credit_ledger (tenant_id, credit_type, delta, reason)
-           VALUES (current_tenant_id(),$1,$2,'topup')`,
-          [req.body.credit_type, req.body.amount]);
-        return (await tx.query(
-          `SELECT balance FROM credit_wallets
-            WHERE tenant_id=current_tenant_id() AND credit_type=$1`,
-          [req.body.credit_type])).rows[0];
-      }));
-
-  // ---- consent (NDPR) — per person, per channel ---------------------------
-  app.get<{ Params: { id: string } }>("/api/members/:id/consent", auth, async (req) =>
-    tenantTx(req, async (tx) => (await tx.query(
-      `SELECT channel, status, updated_at FROM consents WHERE person_id = $1`,
-      [req.params.id])).rows));
-
-  app.put<{ Params: { id: string }; Body: { channel: string; granted: boolean } }>(
-    "/api/members/:id/consent", staff, async (req) =>
-      tenantTx(req, async (tx) => {
-        const st = req.body.granted ? "granted" : "revoked";
-        await tx.query(
-          `INSERT INTO consents (tenant_id, person_id, channel, status)
-           VALUES (current_tenant_id(),$1,$2,$3)
-           ON CONFLICT (tenant_id, person_id, channel) DO UPDATE
-             SET status=$3, updated_at=now()`,
-          [req.params.id, req.body.channel, st]);
-        // append-only trail. Under NDPR you must be able to show WHEN and HOW.
-        await tx.query(
-          `INSERT INTO consent_events (tenant_id, person_id, channel, action, source, actor_user)
-           VALUES (current_tenant_id(),$1,$2,$3,'admin',$4)`,
-          [req.params.id, req.body.channel, req.body.granted ? "granted" : "revoked",
-           req.auth!.userId]);
-        return { channel: req.body.channel, status: st };
-      }));
-
-  // ---- delivery webhook (public — the provider calls it) -------------------
-  app.post<{ Body: any }>("/api/notify/webhook/:provider", async (req, reply) => {
-    const b: any = req.body ?? {};
-    const ref = b.message_id ?? b.id ?? b.messageId;
-    const status = b.status ?? b.Status ?? b.event;
-    if (ref) await n.receipt(String(ref), String(status ?? "")).catch(() => {});
-    reply.send({ ok: true });
-  });
+  /** Inbound STOP webhook. Instant, final, and it writes a consent event. */
+  app.post<{ Body: { from?: string; sender?: string; message?: string; sms?: string } }>(
+    "/api/notify/inbound", async (req, reply) => {
+      const from = req.body.from ?? req.body.sender;
+      const text = (req.body.message ?? req.body.sms ?? "").trim().toUpperCase();
+      if (from && /^(STOP|UNSUBSCRIBE|CANCEL|QUIT|END)$/.test(text)) {
+        const e164 = from.startsWith("+") ? from : "+" + from;
+        await n.handleStop(e164);
+      }
+      reply.send({ ok: true });
+    });
 }

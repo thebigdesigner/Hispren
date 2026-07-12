@@ -1,196 +1,144 @@
 -- ============================================================================
--- 007 — NOTIFICATIONS, TASKS, CARE, SEGMENTS
+-- 007 — NOTIFICATIONS
 --
--- This is the layer the whole product has been building toward. Everything in
--- it is shaped by three Nigerian realities:
+-- THE TWO ROUTES. Every Nigerian gateway works this way.
 --
---   1. 160 GSM-7 characters is one SMS. ONE non-GSM character (a curly quote
---      pasted from Word, a Yoruba diacritic) drops it to 70 and TRIPLES the
---      cost. The counter is not a nicety.
---   2. DND blocks promotional SMS. Church messages sit on the promotional /
---      transactional line. Get the route wrong and half a congregation never
---      hears from you, and the pastor blames the software.
---   3. Most people carry two SIMs. If phone 1 fails, try phone 2.
+--   generic  Promotional. Does NOT deliver to DND-registered numbers at all.
+--            MTN blocks it entirely between 8pm and 8am WAT.
+--            A Saturday-evening service reminder simply never arrives.
+--
+--   dnd      Transactional. Reaches DND numbers. No time restriction.
+--            Must be activated by the provider; sender ID whitelisted for it.
+--
+-- DND registration is widespread in Nigeria. On the generic route a large share
+-- of a congregation receives NOTHING, silently, and the pastor blames Hispren.
+-- The DND route is not an optimisation. It is the product.
 -- ============================================================================
 BEGIN;
 
 -- ----------------------------------------------------------------------------
--- Templates. A message a church sends more than once.
+-- Sender IDs — a church sends as "DOMINION", not as a phone number.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS sender_ids (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id    uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  sender_id    text NOT NULL,                    -- max 11 chars, alphanumeric
+  status       text NOT NULL DEFAULT 'pending'
+               CHECK (status IN ('pending','active','blocked','rejected')),
+  dnd_approved boolean NOT NULL DEFAULT false,   -- whitelisted for the DND route?
+  use_case     text,
+  requested_at timestamptz NOT NULL DEFAULT now(),
+  approved_at  timestamptz,
+  is_default   boolean NOT NULL DEFAULT false,
+  UNIQUE (tenant_id, sender_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sender_tenant ON sender_ids(tenant_id);
+
+-- ----------------------------------------------------------------------------
+-- Templates. Merge fields: {{first_name}} {{church}} {{service}}
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS message_templates (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id   uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  key         text NOT NULL,
   name        text NOT NULL,
-  channel     text NOT NULL CHECK (channel IN ('sms','email','whatsapp','push')),
-  subject     text,                       -- email only
-  body        text NOT NULL,              -- {{first_name}}, {{church}}, {{service}}
-  kind        text NOT NULL DEFAULT 'custom'
-              CHECK (kind IN ('custom','welcome','birthday','anniversary',
-                              'service_reminder','missed_attendance','follow_up','receipt')),
-  is_system   boolean NOT NULL DEFAULT false,   -- seeded defaults, editable
+  channel     text NOT NULL DEFAULT 'sms' CHECK (channel IN ('sms','whatsapp','email')),
+  subject     text,
+  body        text NOT NULL,
+  is_system   boolean NOT NULL DEFAULT false,
   archived_at timestamptz,
-  created_at  timestamptz NOT NULL DEFAULT now()
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, key)
 );
-CREATE INDEX IF NOT EXISTS idx_templates_tenant ON message_templates(tenant_id, kind);
+CREATE INDEX IF NOT EXISTS idx_templates_tenant ON message_templates(tenant_id);
 
 -- ----------------------------------------------------------------------------
--- A message: one send, to many people.
+-- Campaigns — one bulk send
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS campaigns (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id    uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  name         text NOT NULL,
+  channel      text NOT NULL DEFAULT 'sms',
+  template_id  uuid REFERENCES message_templates(id) ON DELETE SET NULL,
+  body         text NOT NULL,
+  status       text NOT NULL DEFAULT 'draft'
+               CHECK (status IN ('draft','queued','sending','sent','cancelled','failed')),
+  recipients   int NOT NULL DEFAULT 0,
+  suppressed   int NOT NULL DEFAULT 0,
+  queued       int NOT NULL DEFAULT 0,
+  delivered    int NOT NULL DEFAULT 0,
+  failed       int NOT NULL DEFAULT 0,
+  units        int NOT NULL DEFAULT 0,           -- SMS pages, not messages
+  cost         numeric(14,2) NOT NULL DEFAULT 0,
+  created_by   uuid REFERENCES app_users(id),
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  sent_at      timestamptz
+);
+CREATE INDEX IF NOT EXISTS idx_campaigns_tenant ON campaigns(tenant_id, created_at DESC);
+
+-- ----------------------------------------------------------------------------
+-- Messages. Every single one — INCLUDING the ones we refused to send.
+--
+-- A suppressed message is not a silent no-op. It is a row with a reason.
+-- When a pastor says "she never got it", the answer is one query away:
+-- she opted out on 14 March, or she is on DND and you used the generic route.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS messages (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id     uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  channel       text NOT NULL CHECK (channel IN ('sms','email','whatsapp','push')),
-  subject       text,
+  campaign_id   uuid REFERENCES campaigns(id) ON DELETE CASCADE,
+  person_id     uuid REFERENCES persons(id) ON DELETE SET NULL,
+  channel       text NOT NULL DEFAULT 'sms' CHECK (channel IN ('sms','whatsapp','email','push')),
+  to_address    text NOT NULL,
+  sender_id     text,
   body          text NOT NULL,
-  template_id   uuid REFERENCES message_templates(id) ON DELETE SET NULL,
-  segment_id    uuid REFERENCES segments(id) ON DELETE SET NULL,
-  status        text NOT NULL DEFAULT 'draft'
-                CHECK (status IN ('draft','queued','sending','sent','failed','cancelled')),
-  -- what the composer computed BEFORE sending: units per message, total cost
-  units_each    int  NOT NULL DEFAULT 1,
-  encoding      text NOT NULL DEFAULT 'GSM-7' CHECK (encoding IN ('GSM-7','UCS-2')),
-  total_targets int  NOT NULL DEFAULT 0,
-  suppressed    int  NOT NULL DEFAULT 0,
-  estimated_cost numeric(12,2) NOT NULL DEFAULT 0,
-  sent_count    int  NOT NULL DEFAULT 0,
-  failed_count  int  NOT NULL DEFAULT 0,
-  created_by    uuid REFERENCES app_users(id),
-  created_at    timestamptz NOT NULL DEFAULT now(),
-  sent_at       timestamptz
-);
-CREATE INDEX IF NOT EXISTS idx_messages_tenant ON messages(tenant_id, created_at DESC);
-
--- ----------------------------------------------------------------------------
--- One row per person per message. This is where delivery truth lives.
---
--- `suppressed_reason` is the important column. When a pastor asks "why didn't
--- Amaka get it?", this answers in one word: consent / dnd / deceased /
--- frequency_cap / quiet_hours / no_number / bounced.
--- ----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS message_recipients (
-  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id     uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  message_id    uuid NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-  person_id     uuid NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
-  address       text,                     -- the number/email actually used
-  used_fallback boolean NOT NULL DEFAULT false,   -- phone_2 because phone_1 failed
-  status        text NOT NULL DEFAULT 'pending'
-                CHECK (status IN ('pending','sent','delivered','failed','suppressed')),
-  suppressed_reason text CHECK (suppressed_reason IN
-                ('consent','dnd','deceased','frequency_cap','quiet_hours',
-                 'no_number','bounced','no_credit')),
-  provider      text,
-  provider_ref  text,                     -- for matching the delivery webhook
   units         int NOT NULL DEFAULT 1,
+  encoding      text NOT NULL DEFAULT 'GSM7' CHECK (encoding IN ('GSM7','UCS2')),
+  route         text CHECK (route IN ('generic','dnd','whatsapp','email')),
+  status        text NOT NULL DEFAULT 'queued'
+                CHECK (status IN ('queued','sent','delivered','failed','suppressed')),
+  suppressed_by text,
+  provider      text,
+  provider_id   text,
   error         text,
+  cost          numeric(10,4) NOT NULL DEFAULT 0,
+  queued_at     timestamptz NOT NULL DEFAULT now(),
   sent_at       timestamptz,
-  delivered_at  timestamptz,
-  UNIQUE (message_id, person_id)
+  delivered_at  timestamptz
 );
-CREATE INDEX IF NOT EXISTS idx_recip_message ON message_recipients(message_id, status);
-CREATE INDEX IF NOT EXISTS idx_recip_person  ON message_recipients(tenant_id, person_id, sent_at DESC);
-CREATE INDEX IF NOT EXISTS idx_recip_ref     ON message_recipients(provider_ref)
-  WHERE provider_ref IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_msg_tenant_time ON messages(tenant_id, queued_at DESC);
+CREATE INDEX IF NOT EXISTS idx_msg_person      ON messages(tenant_id, person_id, queued_at DESC);
+CREATE INDEX IF NOT EXISTS idx_msg_campaign    ON messages(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_msg_queued      ON messages(tenant_id) WHERE status = 'queued';
+CREATE INDEX IF NOT EXISTS idx_msg_provider_id ON messages(provider_id) WHERE provider_id IS NOT NULL;
 
 -- ----------------------------------------------------------------------------
--- Bounces / hard failures. A number that hard-bounces is suppressed until
--- someone verifies it at the gate. Otherwise you burn credits on it weekly.
+-- Suppression list — STOP replies, hard bounces, dead numbers.
+-- Checked at the SEND layer. An admin must not be able to compose around it.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS suppressions (
   tenant_id   uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  address     text NOT NULL,              -- +2348031234567 or an email
+  address     text NOT NULL,
   channel     text NOT NULL,
-  reason      text NOT NULL,              -- 'hard_bounce','stop_reply','dnd'
+  reason      text NOT NULL,
   created_at  timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (tenant_id, address, channel)
 );
 
 -- ----------------------------------------------------------------------------
--- Per-tenant comms settings. Quiet hours and the frequency cap are the two
--- guardrails that stop a church texting a member at 3am, eleven times.
+-- DND status, cached. Checking costs an API call — a 3,000-member church would
+-- burn 3,000 calls per campaign. DND status changes rarely; a stale week is fine.
+-- Deliberately NOT tenant-scoped: a phone number's DND status is a fact about
+-- the number, not about the church.
 -- ----------------------------------------------------------------------------
-ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sender_id       text;
-ALTER TABLE tenants ADD COLUMN IF NOT EXISTS quiet_from      time NOT NULL DEFAULT '21:00';
-ALTER TABLE tenants ADD COLUMN IF NOT EXISTS quiet_to        time NOT NULL DEFAULT '07:00';
-ALTER TABLE tenants ADD COLUMN IF NOT EXISTS weekly_cap      int  NOT NULL DEFAULT 3;
-ALTER TABLE tenants ADD COLUMN IF NOT EXISTS sms_provider    text NOT NULL DEFAULT 'dry_run'
-  CHECK (sms_provider IN ('dry_run','termii','africastalking'));
-
--- ----------------------------------------------------------------------------
--- FREQUENCY CAP — across ALL messages, not per campaign.
---
--- Without a global cap, three separate workflows each send "reasonably", and
--- a member gets eleven texts in a week and blocks the church's number.
--- ----------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION messages_this_week(p uuid)
-RETURNS int LANGUAGE sql STABLE AS $$
-  SELECT count(*)::int FROM message_recipients
-   WHERE person_id = p AND status IN ('sent','delivered')
-     AND sent_at > now() - interval '7 days'
-$$;
-GRANT EXECUTE ON FUNCTION messages_this_week(uuid) TO hispren_app;
-
--- ----------------------------------------------------------------------------
--- SEGMENTS — the dynamic evaluator.
---
--- A dynamic segment is a stored filter, evaluated on read. It is never a raw
--- SQL string: a church admin must not be able to type SQL into a text box.
--- The filter is a small, closed vocabulary compiled here.
--- ----------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION eval_segment(seg uuid)
-RETURNS TABLE (person_id uuid)
-LANGUAGE plpgsql STABLE AS $fn$
-DECLARE
-  s record;
-  f jsonb;
-BEGIN
-  SELECT * INTO s FROM segments WHERE id = seg;
-  IF NOT FOUND THEN RETURN; END IF;
-
-  IF s.kind = 'static' THEN
-    RETURN QUERY SELECT sm.person_id FROM segment_members sm WHERE sm.segment_id = seg;
-    RETURN;
-  END IF;
-
-  f := s.filter;
-
-  RETURN QUERY
-  SELECT p.id FROM persons p
-    LEFT JOIN journey_stages js ON js.id = p.journey_stage_id
-    LEFT JOIN groups g ON g.id = p.home_group_id
-   WHERE p.archived_at IS NULL
-     AND NOT p.is_deceased
-     -- stage
-     AND (f->>'stage' IS NULL OR js.key = f->>'stage')
-     -- group (including everything beneath it)
-     AND (f->>'group_id' IS NULL OR p.home_group_id IN (
-           WITH RECURSIVE d AS (
-             SELECT id FROM groups WHERE id = (f->>'group_id')::uuid
-             UNION ALL SELECT c.id FROM groups c JOIN d ON c.parent_id = d.id
-           ) SELECT id FROM d))
-     -- service
-     AND (f->>'service' IS NULL OR p.usual_service = f->>'service')
-     -- gender
-     AND (f->>'gender' IS NULL OR p.gender = f->>'gender')
-     -- state of origin
-     AND (f->>'state' IS NULL OR p.state_of_origin = f->>'state')
-     -- birthday this month
-     AND (f->>'birthday_month' IS NULL
-          OR p.dob_month = (f->>'birthday_month')::int)
-     -- absent for N weeks (the most valuable filter in the product)
-     AND (f->>'absent_weeks' IS NULL
-          OR (p.last_attended_at IS NOT NULL
-              AND p.last_attended_at < now() - ((f->>'absent_weeks')::int * interval '7 days')))
-     -- never attended at all
-     AND (f->>'never_attended' IS NULL
-          OR (f->>'never_attended')::boolean IS NOT TRUE
-          OR p.last_attended_at IS NULL)
-     -- has a phone we can reach
-     AND (f->>'has_phone' IS NULL
-          OR (f->>'has_phone')::boolean IS NOT TRUE
-          OR (p.phone IS NOT NULL OR p.phone_2 IS NOT NULL));
-END $fn$;
-GRANT EXECUTE ON FUNCTION eval_segment(uuid) TO hispren_app;
+CREATE TABLE IF NOT EXISTS dnd_status (
+  phone       text PRIMARY KEY,
+  is_dnd      boolean NOT NULL,
+  network     text,
+  checked_at  timestamptz NOT NULL DEFAULT now()
+);
+GRANT SELECT, INSERT, UPDATE ON dnd_status TO hispren_app, hispren_platform;
 
 -- ----------------------------------------------------------------------------
 -- RLS
@@ -198,7 +146,7 @@ GRANT EXECUTE ON FUNCTION eval_segment(uuid) TO hispren_app;
 DO $$
 DECLARE t text;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['message_templates','messages','message_recipients','suppressions'] LOOP
+  FOREACH t IN ARRAY ARRAY['sender_ids','message_templates','campaigns','messages','suppressions'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);
@@ -207,37 +155,90 @@ BEGIN
         USING (tenant_id = current_tenant_id())
         WITH CHECK (tenant_id = current_tenant_id())
     $p$, t);
+    -- the worker drains the send queue across every tenant
+    EXECUTE format('DROP POLICY IF EXISTS platform_access ON %I', t);
+    EXECUTE format($p$
+      CREATE POLICY platform_access ON %I FOR ALL TO hispren_platform
+        USING (true) WITH CHECK (true)
+    $p$, t);
   END LOOP;
 END $$;
 GRANT SELECT, INSERT, UPDATE, DELETE
-  ON message_templates, messages, message_recipients, suppressions TO hispren_app;
-
--- The worker needs to read queued messages across tenants to send them.
-DROP POLICY IF EXISTS platform_access ON messages;
-CREATE POLICY platform_access ON messages FOR ALL TO hispren_platform
-  USING (true) WITH CHECK (true);
-DROP POLICY IF EXISTS platform_access ON message_recipients;
-CREATE POLICY platform_access ON message_recipients FOR ALL TO hispren_platform
-  USING (true) WITH CHECK (true);
-GRANT SELECT, INSERT, UPDATE ON messages, message_recipients TO hispren_platform;
+  ON sender_ids, message_templates, campaigns, messages, suppressions
+  TO hispren_app, hispren_platform;
 
 -- ----------------------------------------------------------------------------
--- Default templates. Nigerian church voice, and every one fits in ONE SMS.
+-- THE WALLET.
+--
+-- Sending a campaign must DEBIT the church's SMS credit — and that happens
+-- inside the tenant's own transaction, as hispren_app.
+--
+-- But if hispren_app can UPDATE credit_wallets, it can also set its own balance
+-- to a million and send free SMS forever. A bug, or a compromised dependency,
+-- becomes unlimited spending on someone else's gateway account.
+--
+-- So: hispren_app may DECREASE the balance. Any attempt to INCREASE it is
+-- refused by the database. Top-ups are a PLATFORM operation — they follow money
+-- actually arriving, and they run as hispren_platform.
+-- ----------------------------------------------------------------------------
+DROP POLICY IF EXISTS tenant_debit ON credit_wallets;
+CREATE POLICY tenant_debit ON credit_wallets FOR UPDATE TO hispren_app
+  USING (tenant_id = current_tenant_id())
+  WITH CHECK (tenant_id = current_tenant_id());
+GRANT UPDATE ON credit_wallets TO hispren_app;
+GRANT INSERT ON credit_ledger TO hispren_app;
+
+DROP POLICY IF EXISTS tenant_ledger_write ON credit_ledger;
+CREATE POLICY tenant_ledger_write ON credit_ledger FOR INSERT TO hispren_app
+  WITH CHECK (tenant_id = current_tenant_id());
+
+CREATE OR REPLACE FUNCTION wallet_no_self_topup() RETURNS trigger
+LANGUAGE plpgsql AS $fn$
+BEGIN
+  IF NEW.balance > OLD.balance AND current_user = 'hispren_app' THEN
+    RAISE EXCEPTION 'the app role may spend credit, never add it. Top-ups are a platform operation.';
+  END IF;
+  RETURN NEW;
+END $fn$;
+DROP TRIGGER IF EXISTS trg_wallet_no_topup ON credit_wallets;
+CREATE TRIGGER trg_wallet_no_topup BEFORE UPDATE ON credit_wallets
+  FOR EACH ROW EXECUTE FUNCTION wallet_no_self_topup();
+
+-- ----------------------------------------------------------------------------
+-- Frequency cap: how many messages has this person had recently, across EVERY
+-- campaign and every automation? One indexed lookup.
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION messages_in_window(p uuid, days int DEFAULT 7)
+RETURNS int LANGUAGE sql STABLE AS $fn$
+  SELECT count(*)::int FROM messages
+   WHERE person_id = p
+     AND status IN ('queued','sent','delivered')
+     AND queued_at > now() - (days * interval '1 day')
+$fn$;
+GRANT EXECUTE ON FUNCTION messages_in_window(uuid, int) TO hispren_app, hispren_platform;
+
+-- ----------------------------------------------------------------------------
+-- Seed the templates a church actually needs.
+--
+-- Written in GSM-7 ONLY. No curly quotes, no em dashes, no diacritics.
+-- One smart apostrophe pasted from Word turns a 160-character message into a
+-- 70-character one and triples what the church pays. Every one of these is
+-- deliberately plain.
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION seed_templates(t uuid) RETURNS void
-LANGUAGE sql AS $$
-  INSERT INTO message_templates (tenant_id, name, channel, kind, body, is_system) VALUES
-   (t,'Welcome, first timer','sms','welcome',
+LANGUAGE sql AS $fn$
+  INSERT INTO message_templates (tenant_id, key, name, channel, body, is_system) VALUES
+   (t,'welcome_first_timer','Welcome a first timer','sms',
     'Hello {{first_name}}, thank you for worshipping with us at {{church}} today. We would love to see you again. God bless you.', true),
-   (t,'Birthday','sms','birthday',
+   (t,'follow_up','Follow up','sms',
+    'Hello {{first_name}}, this is {{church}}. We have not seen you in a while and wanted to check on you. Is all well?', true),
+   (t,'birthday','Birthday','sms',
     'Happy birthday {{first_name}}! Everyone at {{church}} is celebrating with you today. May this new year be full of grace.', true),
-   (t,'Service reminder','sms','service_reminder',
-    'Good evening {{first_name}}. A reminder that {{service}} holds tomorrow. We look forward to seeing you at {{church}}.', true),
-   (t,'We have missed you','sms','missed_attendance',
-    'Hello {{first_name}}, we have not seen you at {{church}} in a while and we have been thinking of you. Is everything well?', true),
-   (t,'Follow-up call','sms','follow_up',
-    'Hello {{first_name}}, this is {{church}}. We would love to know how you are doing. Please expect a call from us.', true)
-  ON CONFLICT DO NOTHING;
-$$;
+   (t,'service_reminder','Service reminder','sms',
+    'Hello {{first_name}}, a reminder that {{service}} holds tomorrow. We look forward to worshipping with you at {{church}}.', true),
+   (t,'missed_you','We missed you','sms',
+    'Hello {{first_name}}, we missed you at {{church}} on Sunday. You are in our prayers. Please tell us if there is any way we can help.', true)
+  ON CONFLICT (tenant_id, key) DO NOTHING;
+$fn$;
 
 COMMIT;

@@ -179,6 +179,7 @@ tr.flag:hover{background:#F7DFDF}
     <div class="nav"    data-v="care"       onclick="go('care')"><i class="ti ti-heart-handshake"></i>Pastoral care</div>
     <div class="nav"    data-v="messages"   onclick="go('messages')"><i class="ti ti-message-2"></i>Messages</div>
     <div class="nav"    data-v="reports"    onclick="go('reports')"><i class="ti ti-chart-line"></i>Reports</div>
+    <div class="nav"    data-v="messages"   onclick="go('messages')"><i class="ti ti-message-2"></i>Messages</div>
     <div class="slab">Data</div>
     <div class="nav"    data-v="duplicates" onclick="go('duplicates')"><i class="ti ti-copy"></i>Duplicates<span id="dBadge"></span></div>
     <div class="nav"    data-v="import"     onclick="go('import')"><i class="ti ti-file-import"></i>Import</div>
@@ -1852,6 +1853,274 @@ async function msgDetail(id){
       </div>`).join('')}
     </div>
     <button class="btn btn-o" style="width:100%;margin-top:22px" onclick="close_()">Close</button>
+  </div></div>`;
+}
+
+
+/* ============================== MESSAGES ============================= */
+let PREP=null;
+
+const SUPPRESS_REASON = {
+  consent:       ['Replied STOP', 'NDPR. Not a preference — a lawful basis.'],
+  deceased:      ['Deceased', 'A "we missed you" text to someone who died is damage no feature repays.'],
+  no_number:     ['No phone number', 'Neither SIM on file.'],
+  bounced:       ['Bounced', 'The number is dead, or they replied STOP.'],
+  quiet_hours:   ['Outside the window', 'MTN refuses delivery 8pm-8am on the generic route. Sending anyway means it silently vanishes.'],
+  frequency_cap: ['Too many already', 'Four messages this week already, across every campaign.'],
+  dnd_no_route:  ['On the DND register', 'The generic route CANNOT reach them. Not "less reliably" — at all. You need the DND route.'],
+  no_credit:     ['No SMS credit', 'The wallet is empty.'],
+};
+
+async function viewMessages(){
+  const [st, camps, tmpls] = await Promise.all([
+    api('/api/notify/status'),
+    api('/api/notify/campaigns').catch(()=>[]),
+    api('/api/notify/templates').catch(()=>[])]);
+  window._T = tmpls;
+
+  head('Messages', st.live ? `Live via ${st.provider}` : 'Dry run — nothing is actually sent',
+    `<button class="btn" onclick="compose()">Compose</button>`);
+
+  $('#view').innerHTML=`
+   ${!st.live ? `<div class="card" style="margin-bottom:16px;border-left:3px solid var(--warn)">
+     <div class="ch"><i class="ti ti-flask" style="color:var(--warn)"></i><h3>Dry run</h3></div>
+     <div class="muted" style="line-height:1.8">
+       No <b style="color:var(--ink)">TERMII_API_KEY</b> is set, so nothing leaves the building.
+       Every message is still composed, counted, costed and <b style="color:var(--ink)">put through
+       the full suppression layer</b> — you can see exactly who would be reached and who would not.
+       Set the key and the same code starts sending for real.</div>
+   </div>` : ''}
+
+   ${!st.sender_id ? `<div class="card" style="margin-bottom:16px;border-left:3px solid var(--bad)">
+     <div class="ch"><i class="ti ti-alert-triangle" style="color:var(--bad)"></i>
+       <h3>No sender ID</h3></div>
+     <div class="muted" style="line-height:1.8;margin-bottom:14px">
+       A church sends as <b style="color:var(--ink)">DOMINION</b>, not as a phone number.
+       Register one with your provider — it takes days and needs approval per operator.</div>
+     <div style="display:flex;gap:10px">
+       <input id="sid" placeholder="DOMINION" maxlength="11" style="max-width:200px">
+       <button class="btn" onclick="addSender()">Add sender ID</button>
+     </div>
+   </div>` : ''}
+
+   ${st.sender_id && !st.dnd_route ? `<div class="card" style="margin-bottom:16px;border-left:3px solid var(--bad)">
+     <div class="ch"><i class="ti ti-phone-off" style="color:var(--bad)"></i>
+       <h3>The DND route is not approved</h3></div>
+     <div class="muted" style="line-height:1.85">
+       This is the single most important thing on this screen.<br><br>
+       Nigerian numbers on the national <b style="color:var(--ink)">Do-Not-Disturb register cannot
+       be reached on the generic route. At all.</b> Not "less reliably" — the network drops the
+       message and tells nobody. DND registration is widespread, so a large share of your
+       congregation is simply unreachable.<br><br>
+       On top of that, <b style="color:var(--ink)">MTN refuses generic-route delivery between 8pm
+       and 8am</b>. A Saturday-evening service reminder never arrives.<br><br>
+       <b style="color:var(--ink)">Ask your provider to activate the DND route and whitelist your
+       sender ID for it.</b> Until then, Hispren will tell you honestly who it could not reach —
+       rather than pretending the message went out.</div>
+   </div>` : ''}
+
+   <div class="kpis">
+     <div class="kpi ${st.sender_id?'acc':'bad'}"><div class="l">Sender ID</div>
+       <div class="v" style="font-size:20px;padding-top:8px">${esc(st.sender_id||'none')}</div>
+       <div class="d muted">What members see</div></div>
+     <div class="kpi ${st.dnd_route?'acc':'bad'}"><div class="l">DND route</div>
+       <div class="v" style="font-size:20px;padding-top:8px">${st.dnd_route?'Active':'Not approved'}</div>
+       <div class="d" style="color:${st.dnd_route?'var(--good)':'var(--bad)'}">
+         ${st.dnd_route?'Reaches everyone':'DND numbers unreachable'}</div></div>
+     <div class="kpi"><div class="l">SMS credit</div>
+       <div class="v">${Number(st.sms_balance).toLocaleString()}</div>
+       <div class="d muted">Pages, not messages</div></div>
+     <div class="kpi"><div class="l">Campaigns</div><div class="v">${camps.length}</div></div>
+   </div>
+
+   <div class="card">
+     <div class="ch"><i class="ti ti-send"></i><h3>Campaigns</h3></div>
+     ${camps.length?`<table><thead><tr>
+       <th>Campaign</th><th>Sent</th><th>Suppressed</th><th>Pages</th><th>Cost</th><th>Status</th>
+     </tr></thead><tbody>
+     ${camps.map(c=>`<tr onclick="openCampaign('${c.id}','${esc(c.name)}')">
+       <td><div style="font-weight:600;color:var(--ink)">${esc(c.name)}</div>
+         <div class="muted" style="font-size:12px">
+           ${new Date(c.created_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
+           ${c.by_who?' · '+esc(c.by_who):''}</div></td>
+       <td class="num" style="color:var(--ink)">${c.queued}</td>
+       <td class="num" style="color:${c.suppressed?'var(--warn)':'var(--muted)'}">${c.suppressed}</td>
+       <td class="num muted">${c.units}</td>
+       <td class="num muted">${Number(c.cost).toLocaleString()}</td>
+       <td><span class="tag ${c.status==='sent'||c.status==='queued'?'t-g':
+         c.status==='failed'?'t-r':'t-n'}">${esc(c.status)}</span></td>
+     </tr>`).join('')}</tbody></table>`
+     :'<div class="muted">Nothing sent yet.</div>'}
+   </div>`;
+}
+
+async function addSender(){
+  const v=$('#sid').value.trim();
+  if(!v) return;
+  await api('/api/notify/sender-ids',{method:'POST',
+    body:JSON.stringify({sender_id:v, use_case:'Church announcements and pastoral follow-up'})});
+  go('messages');
+}
+
+function compose(){
+  const T = window._T || [];
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div class="h" style="font-size:22px;font-weight:500">Compose</div>
+    <div class="muted" style="margin-bottom:24px;line-height:1.75">
+      Nothing is sent until you see exactly who it reaches — and who it does not.</div>
+    <div id="merr"></div>
+    <div class="field"><label>Name this campaign</label>
+      <input id="m_name" placeholder="Sunday reminder"></div>
+    <div class="field"><label>Start from a template</label>
+      <select id="m_t" onchange="useTemplate()">
+        <option value="">— write my own —</option>
+        ${T.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}
+      </select></div>
+    <div class="field"><label>Message</label>
+      <textarea id="m_body" rows="4" oninput="recount()"
+        style="font-family:var(--text);font-size:14px;padding:12px;border:1px solid var(--line);
+               border-radius:8px;width:100%;resize:vertical"
+        placeholder="Hello {{first_name}}, ..."></textarea>
+      <div class="muted" style="margin-top:6px">
+        Merge fields: <b style="color:var(--ink)">{{first_name}}</b>
+        <b style="color:var(--ink)">{{church}}</b></div>
+    </div>
+    <div id="m_count"></div>
+    <div style="display:flex;gap:12px;margin-top:24px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
+      <button class="btn" style="flex:2" onclick="doPrepare()">See who this reaches</button>
+    </div>
+  </div></div>`;
+}
+
+function useTemplate(){
+  const t=(window._T||[]).find(x=>x.id===$('#m_t').value);
+  if(t){ $('#m_body').value=t.body; if(!$('#m_name').value) $('#m_name').value=t.name; recount(); }
+}
+
+async function recount(){
+  const body=$('#m_body').value;
+  if(!body){ $('#m_count').innerHTML=''; return; }
+  const c=await api('/api/notify/count',{method:'POST',body:JSON.stringify({body})});
+  const r=c.raw, n=c.normalised;
+  const overpaying = r.units > n.units;
+  $('#m_count').innerHTML=`
+    <div style="background:${overpaying?'var(--bad-soft)':'var(--brand-wash)'};
+         border:1px solid ${overpaying?'var(--bad)':'var(--brand-soft)'};
+         border-radius:9px;padding:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:600;color:var(--ink);font-size:13px">
+            ${r.encoding} · ${r.chars} characters</div>
+          <div class="muted">${r.remaining} left in this page</div>
+        </div>
+        <div class="num" style="font-size:24px;color:${overpaying?'var(--bad)':'var(--ink)'}">
+          ${r.units} page${r.units===1?'':'s'}</div>
+      </div>
+      ${overpaying?`<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--bad-soft);
+        font-size:13px;line-height:1.75;color:var(--bad)">
+        <b>You are paying ${r.units}x.</b> These characters are not in the SMS alphabet:
+        <b>${r.offenders.map(o=>esc(o)).join(' ')}</b> — almost certainly pasted from Word.
+        One curly apostrophe turns a 160-character message into a 70-character one.
+        <button class="btn" style="background:var(--bad);margin-top:10px"
+          onclick="fixText()">Fix it — back to ${n.units} page${n.units===1?'':'s'}</button>
+      </div>`:''}
+    </div>`;
+}
+
+async function fixText(){
+  const c=await api('/api/notify/count',{method:'POST',
+    body:JSON.stringify({body:$('#m_body').value})});
+  $('#m_body').value=c.fixed;
+  recount();
+}
+
+async function doPrepare(){
+  const name=$('#m_name').value.trim()||'Campaign';
+  const body=$('#m_body').value.trim();
+  if(!body){$('#merr').innerHTML='<div class="err">Write something first.</div>';return}
+  try{
+    PREP=await api('/api/notify/prepare',{method:'POST',
+      body:JSON.stringify({name, body, template_id:$('#m_t').value||undefined})});
+    showPrepare();
+  }catch(e){ $('#merr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
+}
+
+function showPrepare(){
+  const p=PREP;
+  const cost=(p.units*4.5);
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div class="h" style="font-size:22px;font-weight:500">Before you send</div>
+    <div class="muted" style="margin-bottom:24px">Nothing has left yet.</div>
+
+    <div class="kpis" style="margin-bottom:20px">
+      <div class="kpi acc"><div class="l">Will be sent</div><div class="v">${p.queued}</div></div>
+      <div class="kpi ${p.suppressed?'warn':''}"><div class="l">Will not</div>
+        <div class="v">${p.suppressed}</div></div>
+      <div class="kpi"><div class="l">SMS pages</div><div class="v">${p.units}</div></div>
+      <div class="kpi"><div class="l">Cost</div>
+        <div class="v" style="font-size:22px;padding-top:6px">NGN ${cost.toLocaleString()}</div></div>
+    </div>
+
+    <div class="sect">This is what they will receive</div>
+    <div style="background:var(--brand-wash);border:1px solid var(--brand-soft);border-radius:9px;
+         padding:16px;font-size:14px;line-height:1.7;white-space:pre-wrap">${esc(p.sample)}</div>
+    <div class="muted" style="margin-top:8px">
+      From <b style="color:var(--ink)">${esc(p.sender_id||'no sender ID')}</b> ·
+      ${p.counted.encoding} · ${p.counted.units} page${p.counted.units===1?'':'s'}</div>
+
+    ${p.suppressed?`<div class="sect">Who this will NOT reach, and why</div>
+      ${Object.entries(p.reasons).map(([k,n])=>{
+        const [t,d]=SUPPRESS_REASON[k]||[k,''];
+        return `<div class="li">
+          <div class="g" style="background:${k==='dnd_no_route'||k==='consent'||k==='deceased'
+            ?'var(--bad)':'var(--warn)'}">
+            <i class="ti ti-${k==='consent'?'ban':k==='deceased'?'cross':
+              k==='dnd_no_route'?'phone-off':k==='quiet_hours'?'clock-off':'alert-triangle'}"></i></div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;color:var(--ink)">${t}</div>
+            <div class="muted" style="line-height:1.65">${d}</div></div>
+          <div class="num" style="font-size:20px">${n}</div>
+        </div>`;}).join('')}`:''}
+
+    <div style="display:flex;gap:12px;margin-top:28px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
+      <button class="btn" style="flex:2" onclick="doSend()"
+        ${p.queued?'':'disabled style="flex:2;opacity:.4"'}>
+        ${p.queued?`Send to ${p.queued}`:'Nobody to send to'}</button>
+    </div>
+  </div></div>`;
+}
+
+async function doSend(){
+  try{
+    const r=await api('/api/notify/send/'+PREP.campaign_id,{method:'POST'});
+    close_();
+    alert(`Queued ${r.queued} message${r.queued===1?'':'s'} · ${r.units} pages · NGN ${r.cost}\n`
+      +`SMS credit remaining: ${r.balance}`);
+    go('messages');
+  }catch(e){ alert(e.message) }
+}
+
+async function openCampaign(id,name){
+  const msgs=await api('/api/notify/messages?campaign_id='+id);
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div class="h" style="font-size:22px;font-weight:500">${esc(name)}</div>
+    <div class="muted" style="margin-bottom:22px;line-height:1.75">
+      Every message, <b style="color:var(--ink)">including the ones we refused to send.</b>
+      When someone says "I never got it", the answer is here.</div>
+    <table><thead><tr><th>Member</th><th>Number</th><th>Status</th><th>Why</th></tr></thead>
+    <tbody>${msgs.map(m=>`<tr>
+      <td style="font-weight:600;color:var(--ink)">${esc(m.name||'—')}</td>
+      <td class="muted">${esc(m.to_address)}</td>
+      <td><span class="tag ${m.status==='suppressed'?'t-r':
+        m.status==='failed'?'t-r':m.status==='sent'?'t-g':'t-n'}">${esc(m.status)}</span></td>
+      <td class="muted" style="font-size:12px">${
+        m.suppressed_by ? esc((SUPPRESS_REASON[m.suppressed_by]||[m.suppressed_by])[0])
+        : m.error ? esc(m.error)
+        : m.route ? esc(m.route)+' route' : '—'}</td>
+    </tr>`).join('')}</tbody></table>
+    <button class="btn btn-o" style="width:100%;margin-top:24px" onclick="close_()">Close</button>
   </div></div>`;
 }
 

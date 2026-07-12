@@ -10,6 +10,8 @@ import IORedis from "ioredis";
 import { startOutboxRelay, registerSchedules } from "./platform/queue";
 import { runMeteringSnapshot, runRenewals, runDunningSweep } from "./billing/metering";
 import { platformQuery } from "./platform/db";
+import { drainQueue, refreshDnd } from "./notify/service";
+import { runBirthdays, runServiceReminders, runMissedAttendance } from "./notify/reminders";
 import { birthdayReminders, serviceReminders, missedAttendanceReminders, followUpTasks }
   from "./notify/reminders";
 import { deliver } from "./notify/service";
@@ -27,6 +29,15 @@ new Worker("jobs", async (job) => {
     case "sessions.purge":
       await platformQuery(`DELETE FROM sessions WHERE expires_at < now()`);
       return;
+
+    // The send queue. Every 30 seconds.
+    case "notify.drain":            return void await drainQueue(50);
+    // DND status, cached — checking costs an API call per number.
+    case "notify.dnd":              return void await refreshDnd(200);
+    // Cron, not AI. A WHERE clause and a date.
+    case "reminders.birthdays":     return runBirthdays();
+    case "reminders.service":       return runServiceReminders();
+    case "reminders.missed":        return runMissedAttendance(3);
     case "reminders.birthday":  return birthdayReminders();
     case "reminders.service":   return serviceReminders();
     case "reminders.missed":    return missedAttendanceReminders(3);

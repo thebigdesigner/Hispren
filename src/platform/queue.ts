@@ -48,6 +48,21 @@ export async function registerSchedules(): Promise<void> {
   await jobsQueue.add("billing.dunning.sweep", {}, daily(8));
   await jobsQueue.add("sessions.purge", {}, daily(3));
 
+  // --- notifications ---
+  // Drain the send queue every 30 seconds.
+  await jobsQueue.add("notify.drain", {},
+    { repeat: { every: 30_000 } });
+  // Refresh cached DND status nightly.
+  await jobsQueue.add("notify.dnd", {}, daily(1));
+  // Birthdays at 08:00 WAT — inside the window MTN allows on the generic route.
+  await jobsQueue.add("reminders.birthdays", {}, daily(8));
+  // Service reminders at 15:00 the day BEFORE. NOT the evening: on the generic
+  // route MTN refuses delivery 8pm-8am, so an evening reminder never arrives.
+  await jobsQueue.add("reminders.service", {}, daily(15));
+  // Missed-attendance drafts on Monday morning, for the pastor to approve.
+  await jobsQueue.add("reminders.missed", {},
+    { repeat: { pattern: "0 9 * * 1", tz: "Africa/Lagos" } });
+
   // Reminders. Every one DRAFTS a message and stops — a human presses send.
   await jobsQueue.add("reminders.birthday", {}, daily(7));      // 07:00 WAT
   await jobsQueue.add("reminders.followups", {}, daily(6));     // before the office opens
