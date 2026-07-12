@@ -201,6 +201,7 @@ tr.dupe{background:var(--pink-soft)}
     <div class="nav"    data-v="ai"         onclick="askAI()"><i class="ti ti-sparkles"></i>Hispren AI</div>
     <div class="nav"    data-v="members"    onclick="go('members')"><i class="ti ti-users"></i>Members</div>
     <div class="nav"    data-v="duplicates" onclick="go('duplicates')"><i class="ti ti-copy"></i>Duplicates<span id="dBadge"></span></div>
+    <div class="nav"    data-v="attendance" onclick="go('attendance')"><i class="ti ti-qrcode"></i>Attendance</div>
     <div class="nav"    data-v="import"     onclick="go('import')"><i class="ti ti-upload"></i>Bulk import</div>
 
     <div class="sec"><span>My church</span><span class="add">+ Add</span></div>
@@ -227,6 +228,7 @@ tr.dupe{background:var(--pink-soft)}
     <div class="acts">
       <button class="act v" onclick="askAI()"><i class="ti ti-sparkles"></i>Ask Hispren</button>
       <button class="act" onclick="openForm()">Register a member</button>
+      <button class="act" onclick="go('attendance')">Take attendance</button>
       <button class="act" onclick="go('import')">Import a spreadsheet</button>
       <button class="act" onclick="go('duplicates')">Review duplicates</button>
     </div>
@@ -282,7 +284,7 @@ async function boot(){
 }
 function go(v){
   document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('on',n.dataset.v===v));
-  ({home:viewHome,members:viewMembers,duplicates:viewDupes,import:viewImport})[v]();
+  ({home:viewHome,members:viewMembers,attendance:viewAtt,duplicates:viewDupes,import:viewImport})[v]();
 }
 
 /* ================================ HOME ================================ */
@@ -553,6 +555,58 @@ async function save(){
   if(!b.first_name){$('#ferr').innerHTML='<div class="err">A first name is required.</div>';return}
   try{await api('/api/members',{method:'POST',body:JSON.stringify(b)});close_();await boot();go('members')}
   catch(e){$('#ferr').innerHTML=`<div class="err">${esc(e.message)}</div>`}
+}
+
+/* ============================ ATTENDANCE ============================== */
+async function viewAtt(){
+  const [svcs, rows] = await Promise.all([
+    api('/api/services'),
+    api('/api/attendance/by-service').catch(()=>[])
+  ]);
+  const total = rows.reduce((a,r)=>a+(r.present||0),0);
+  const top = Math.max(0,...rows.map(r=>r.present||0));
+  $('#view').innerHTML = `
+   <div class="card" style="margin-bottom:16px">
+     <div class="ch"><i class="ti ti-qrcode"></i><b>Today at the gate</b>
+       <span class="r">${total} present</span></div>
+     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+       ${rows.map(r=>{const on=r.present===top&&top>0;return `
+         <div style="flex:1;min-width:96px;text-align:center;padding:12px 8px;border-radius:13px;
+              background:${on?'var(--violet)':'var(--violet-wash)'}">
+           <div style="font-size:11px;color:${on?'#CFC4FF':'var(--muted)'}">${esc(r.service)}</div>
+           <div style="font-size:22px;font-weight:700;color:${on?'#fff':'var(--text)'}">${r.present||0}</div>
+           ${r.first_timers?`<div style="font-size:11px;color:${on?'#CFC4FF':'var(--mint-dk)'}">
+             ${r.first_timers} new</div>`:''}
+         </div>`;}).join('')||'<div class="muted">No services set up yet.</div>'}
+     </div>
+     <div style="background:var(--violet-wash);border-radius:15px;padding:16px">
+       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+         <i class="ti ti-device-mobile" style="font-size:26px;color:var(--violet)"></i>
+         <div style="flex:1;min-width:220px">
+           <div style="font-size:13px;font-weight:700">Open the scanner on an usher's phone</div>
+           <div class="muted" style="line-height:1.7">It caches the roster, then works with
+             <b>no internet at all</b>. Every scan is held on the phone and uploaded when the
+             signal returns. 3,000 people in 30 minutes is 1.7 scans a second — a round-trip
+             per scan would back the gate up.</div>
+         </div>
+         <a href="/scan.html?church=${encodeURIComponent(CHURCH)}" target="_blank"
+            class="btn" style="text-decoration:none;white-space:nowrap">Open scanner</a>
+       </div>
+     </div>
+   </div>
+   <div class="card">
+     <div class="ch"><i class="ti ti-calendar-event"></i><b>Services</b></div>
+     ${svcs.map(s=>`<div style="display:flex;align-items:center;gap:12px;padding:11px 0;
+        border-top:1px solid var(--line2)">
+        <div class="gicon" style="width:32px;height:32px;background:${
+          s.kind==='sunday'?'var(--violet)':'var(--blue)'}">
+          <i class="ti ti-${s.kind==='sunday'?'building-church':'users-group'}"></i></div>
+        <div style="flex:1"><div style="font-size:13px;font-weight:600">${esc(s.name)}</div>
+          <div class="muted">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][s.day_of_week]||''}
+            ${s.start_time?'· '+String(s.start_time).slice(0,5):''}</div></div>
+        <span class="pill p-g">${esc(s.kind)}</span>
+      </div>`).join('')||'<div class="muted">None yet.</div>'}
+   </div>`;
 }
 
 /* ============================ DUPLICATES ============================== */

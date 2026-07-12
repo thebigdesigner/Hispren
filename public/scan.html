@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#6D4AFF">
+<title>Hispren — Scan</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.2.0/dist/tabler-icons.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root{--violet:#6D4AFF;--violet-dk:#5B3FD9;--violet-soft:#EDEBFF;
+  --mint:#2DD4BF;--mint-dk:#0F766E;--mint-soft:#EAFBF8;
+  --pink:#FF6B8A;--pink-dk:#C42F52;--pink-soft:#FFE8EC;
+  --amber:#FB923C;--line:#EFEFF4;--text:#1F2033;--muted:#9A9EB0}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#12102B;color:#fff;
+  min-height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+button{font-family:inherit;border:none;cursor:pointer}
+select{font-family:inherit;font-size:14px;padding:12px;border-radius:12px;border:1px solid var(--line);width:100%}
+
+/* ---- status bar ---- */
+.bar{display:flex;align-items:center;gap:10px;padding:12px 16px;background:#1B1740;flex-shrink:0}
+.bar .n{font-size:13px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip{font-size:11px;font-weight:700;padding:4px 9px;border-radius:8px;white-space:nowrap}
+.on{background:var(--mint-soft);color:var(--mint-dk)}
+.off{background:var(--amber);color:#5A2E00}
+.qd{background:var(--violet-soft);color:var(--violet-dk)}
+
+/* ---- camera ---- */
+#cam{flex:1;position:relative;background:#000;min-height:0}
+#reader{width:100%;height:100%}
+#reader video{object-fit:cover!important;width:100%!important;height:100%!important}
+.frame{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.frame div{width:min(62vw,260px);aspect-ratio:1;border:3px solid rgba(255,255,255,.55);border-radius:26px}
+
+/* ---- the flash: the ONLY thing an usher looks at ---- */
+#flash{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
+  justify-content:center;text-align:center;padding:24px;z-index:5}
+#flash.ok{display:flex;background:rgba(45,212,191,.96)}
+#flash.no{display:flex;background:rgba(255,107,138,.96)}
+#flash i{font-size:76px;margin-bottom:14px}
+#flash .who{font-size:32px;font-weight:700;line-height:1.2}
+#flash .sub{font-size:16px;margin-top:8px;opacity:.9}
+#flash.ok{color:#04352F} #flash.no{color:#4A0E20}
+
+/* ---- footer ---- */
+.foot{background:#1B1740;padding:14px 16px;flex-shrink:0}
+.stats{display:flex;gap:8px;margin-bottom:12px}
+.st{flex:1;background:#272151;border-radius:14px;padding:11px;text-align:center}
+.st .l{font-size:11px;color:#9C93D8}
+.st .v{font-size:22px;font-weight:700;margin-top:1px}
+.rate{color:var(--mint)}
+.rate.hot{color:var(--amber)}
+.btn{width:100%;background:var(--violet);color:#fff;font-size:14px;font-weight:700;
+  padding:14px;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn.g{background:#272151}
+.recent{max-height:88px;overflow-y:auto;margin-top:12px}
+.r{display:flex;align-items:center;gap:9px;padding:5px 0;font-size:13px;color:#CFC9F0}
+.r i{font-size:15px;color:var(--mint)}
+.r .t{margin-left:auto;font-size:11px;color:#7C74B8}
+
+/* ---- setup screen ---- */
+#setup{position:fixed;inset:0;background:#12102B;z-index:9;display:flex;flex-direction:column;
+  justify-content:center;padding:26px;gap:14px}
+#setup h1{font-size:22px;font-weight:700}
+#setup p{font-size:13px;color:#9C93D8;line-height:1.7}
+#setup label{font-size:12px;color:#9C93D8;display:block;margin-bottom:7px}
+.err{background:var(--pink-soft);color:var(--pink-dk);padding:12px;border-radius:12px;font-size:13px}
+</style>
+</head>
+<body>
+
+<div id="setup">
+  <div style="display:flex;align-items:center;gap:11px;margin-bottom:6px">
+    <div style="width:38px;height:38px;border-radius:12px;background:var(--violet);
+      display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700">H</div>
+    <h1>Gate scanner</h1>
+  </div>
+  <p>Cache the roster now, while you have signal. After that the scanner works with
+     <b style="color:#fff">no internet at all</b> — every scan is stored on this phone and
+     uploaded when the signal comes back.</p>
+  <div id="serr"></div>
+  <div>
+    <label>Church</label>
+    <select id="church" style="background:#fff;color:var(--text)">
+      <option value="dominion">dominion</option>
+    </select>
+  </div>
+  <div>
+    <label>Service</label>
+    <select id="svc" style="background:#fff;color:var(--text)"><option>Loading…</option></select>
+  </div>
+  <button class="btn" onclick="start()"><i class="ti ti-download"></i>Cache roster and start</button>
+  <div id="cached" style="font-size:12px;color:#9C93D8;text-align:center"></div>
+</div>
+
+<div class="bar">
+  <i class="ti ti-qrcode" style="font-size:20px;color:var(--violet)"></i>
+  <div class="n" id="svcName">—</div>
+  <span class="chip on" id="net">online</span>
+  <span class="chip qd" id="queue" style="display:none">0</span>
+</div>
+
+<div id="cam">
+  <div id="reader"></div>
+  <div class="frame"><div></div></div>
+  <div id="flash"><i class="ti ti-check"></i><div class="who"></div><div class="sub"></div></div>
+</div>
+
+<div class="foot">
+  <div class="stats">
+    <div class="st"><div class="l">Present</div><div class="v" id="nPresent">0</div></div>
+    <div class="st"><div class="l">Queued</div><div class="v" id="nQueue">0</div></div>
+    <div class="st"><div class="l">Rate</div><div class="v rate" id="nRate">0.0/s</div></div>
+  </div>
+  <button class="btn g" onclick="sync()"><i class="ti ti-cloud-upload"></i>
+    <span id="syncTxt">Upload now</span></button>
+  <div class="recent" id="recent"></div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+let CHURCH='', SESSION=null, ROSTER=new Map(), QUEUE=[], SEEN=new Set();
+let scanner=null, times=[], DEVICE='gate-'+Math.random().toString(36).slice(2,7);
+
+/* ---------------- persistence: survives a phone reboot ---------------- */
+const S={
+  save(){ try{ localStorage.setItem('hispren_scan', JSON.stringify({
+      church:CHURCH, session:SESSION, queue:QUEUE, seen:[...SEEN],
+      roster:[...ROSTER.entries()] })); }catch(e){} },
+  load(){ try{ const d=JSON.parse(localStorage.getItem('hispren_scan')||'null'); if(!d)return null;
+      CHURCH=d.church; SESSION=d.session; QUEUE=d.queue||[];
+      SEEN=new Set(d.seen||[]); ROSTER=new Map(d.roster||[]); return d; }catch(e){ return null } }
+};
+
+async function api(p,o={}){
+  const r=await fetch(p,{...o,headers:{'Content-Type':'application/json','X-Church':CHURCH,
+    ...(o.headers||{})},credentials:'include'});
+  if(!r.ok) throw new Error((await r.json().catch(()=>({}))).error||'failed');
+  return r.json();
+}
+
+/* ---------------------------- setup ---------------------------------- */
+(async()=>{
+  const d=S.load();
+  if(d && d.session && d.roster.length){
+    $('#cached').textContent=`${ROSTER.size} people already cached. Resuming.`;
+    $('#church').innerHTML=`<option>${CHURCH}</option>`;
+    await begin(); return;
+  }
+  CHURCH=(new URLSearchParams(location.search).get('church'))||'dominion';
+  $('#church').innerHTML=`<option>${CHURCH}</option>`;
+  try{
+    const svcs=await api('/api/services');
+    $('#svc').innerHTML=svcs.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  }catch(e){
+    $('#serr').innerHTML=`<div class="err">Sign in on the main app first, then come back here.</div>`;
+  }
+})();
+
+async function start(){
+  $('#serr').innerHTML='';
+  try{
+    const sess=await api('/api/attendance/session',{method:'POST',
+      body:JSON.stringify({service_id:$('#svc').value})});
+    SESSION={id:sess.id,name:$('#svc').selectedOptions[0].textContent};
+
+    // Cache the roster. THIS is what makes the scanner work with no signal.
+    const {roster}=await api('/api/attendance/roster');
+    ROSTER=new Map(roster.map(r=>[r.qr_token,r]));
+    S.save();
+    await begin();
+  }catch(e){ $('#serr').innerHTML=`<div class="err">${e.message}</div>` }
+}
+
+async function begin(){
+  $('#setup').style.display='none';
+  $('#svcName').textContent=SESSION.name+' · '+ROSTER.size+' cached';
+  paint();
+  scanner=new Html5Qrcode('reader');
+  try{
+    await scanner.start({facingMode:'environment'},
+      {fps:12, qrbox:{width:250,height:250}, aspectRatio:1.4}, onScan, ()=>{});
+  }catch(e){
+    $('#flash').className='no';
+    $('#flash i').className='ti ti-camera-off';
+    $('#flash .who').textContent='No camera';
+    $('#flash .sub').textContent='Allow camera access, then reload.';
+  }
+  setInterval(()=>{ if(navigator.onLine && QUEUE.length) sync(); }, 20000);
+}
+
+/* -------------------- the scan: ZERO network calls -------------------- */
+let cooling=false;
+function onScan(token){
+  if(cooling) return;
+  cooling=true; setTimeout(()=>cooling=false, 700);
+
+  const p=ROSTER.get(token);       // <- local Map lookup. Sub-millisecond. No internet.
+
+  if(!p){ flash('no','Not recognised','This code is not in the roster'); buzz([90,60,90]); return; }
+  if(SEEN.has(p.person_id)){ flash('ok', p.name.split(' ')[0], 'Already scanned in'); buzz([40]); return; }
+
+  SEEN.add(p.person_id);
+  QUEUE.push({person_id:p.person_id, recorded_at:new Date().toISOString(),
+              method:'qr', device_id:DEVICE});
+  times.push(Date.now());
+  S.save();
+
+  flash('ok', p.name, p.service ? 'Welcome · '+p.service : 'Welcome');
+  buzz([60]);
+  addRecent(p.name);
+  paint();
+  if(navigator.onLine && QUEUE.length>=15) sync();
+}
+
+function flash(kind,who,sub){
+  const f=$('#flash');
+  f.className=kind;
+  $('#flash i').className = kind==='ok' ? 'ti ti-circle-check' : 'ti ti-alert-circle';
+  f.querySelector('.who').textContent=who;
+  f.querySelector('.sub').textContent=sub;
+  clearTimeout(window._f);
+  window._f=setTimeout(()=>{f.className=''},900);
+}
+function buzz(p){ try{navigator.vibrate&&navigator.vibrate(p)}catch(e){} }
+function addRecent(n){
+  const el=document.createElement('div');
+  el.className='r';
+  el.innerHTML=`<i class="ti ti-circle-check"></i><span>${n}</span>
+    <span class="t">${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</span>`;
+  $('#recent').prepend(el);
+  while($('#recent').children.length>12) $('#recent').lastChild.remove();
+}
+
+function paint(){
+  $('#nPresent').textContent=SEEN.size;
+  $('#nQueue').textContent=QUEUE.length;
+  const q=$('#queue');
+  q.style.display=QUEUE.length?'inline-block':'none';
+  q.textContent=QUEUE.length+' waiting';
+
+  // scans per second over the last 30s — the number that tells you if the gate
+  // is backing up. Above ~2/s and the queue outside is growing.
+  const cut=Date.now()-30000;
+  times=times.filter(t=>t>cut);
+  const r=times.length/30;
+  const el=$('#nRate');
+  el.textContent=r.toFixed(1)+'/s';
+  el.className='v rate'+(r>2?' hot':'');
+
+  const n=$('#net');
+  n.className='chip '+(navigator.onLine?'on':'off');
+  n.textContent=navigator.onLine?'online':'offline';
+}
+addEventListener('online',()=>{paint(); sync()});
+addEventListener('offline',paint);
+setInterval(paint,3000);
+
+/* ---------------------------- sync ----------------------------------- */
+let syncing=false;
+async function sync(){
+  if(syncing||!QUEUE.length||!navigator.onLine) return;
+  syncing=true;
+  $('#syncTxt').textContent='Uploading '+QUEUE.length+'…';
+  const batch=QUEUE.slice();
+  try{
+    const r=await api('/api/attendance/sync',{method:'POST',
+      body:JSON.stringify({session_id:SESSION.id, scans:batch})});
+    QUEUE=QUEUE.slice(batch.length);   // only drop what we actually sent
+    S.save();
+    $('#syncTxt').textContent=`Uploaded ${r.accepted}`
+      + (r.duplicates?` · ${r.duplicates} already there`:'');
+    setTimeout(()=>$('#syncTxt').textContent='Upload now',2500);
+  }catch(e){
+    // Keep the queue. Never lose a scan because the network blinked.
+    $('#syncTxt').textContent='No signal — held on this phone';
+    setTimeout(()=>$('#syncTxt').textContent='Upload now',2500);
+  }
+  syncing=false; paint();
+}
+</script>
+</body>
+</html>

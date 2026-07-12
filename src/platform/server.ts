@@ -12,6 +12,7 @@ import { tenantResolver, requireTenant } from "./tenant";
 import { authenticate, requireRole, login, logout, tenantTx } from "./auth";
 import { healthcheck } from "./db";
 import { registerMemberRoutes } from "../members/routes";
+import { registerAttendanceRoutes } from "../attendance/routes";
 
 export function buildServer() {
   const app = Fastify({
@@ -85,6 +86,7 @@ export function buildServer() {
   );
 
   registerMemberRoutes(app);
+  registerAttendanceRoutes(app);
 
   return app;
 }
