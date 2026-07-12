@@ -838,6 +838,8 @@ async function loadSheet(id,name,date,q=''){
 
   head('Mark sheet', `${name} · ${new Date(date).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'})}`,
     `<button class="btn btn-o" onclick="go('attendance')">Back</button>
+     <button class="btn btn-o" onclick="newcomer()">
+       <i class="ti ti-user-plus" style="vertical-align:-2px"></i> Newcomer</button>
      <a href="/scan.html?church=${encodeURIComponent(CHURCH)}" target="_blank" class="btn"
         style="text-decoration:none">Scanner</a>`);
 
@@ -859,8 +861,11 @@ async function loadSheet(id,name,date,q=''){
    </div>
 
    <div class="card">
-     <div style="margin-bottom:18px">
-       <input id="sq" value="${esc(q)}" placeholder="Search a name, phone, or member code"></div>
+     <div style="display:flex;gap:10px;margin-bottom:18px">
+       <input id="sq" value="${esc(q)}" placeholder="Search a name, phone, or member code">
+       <button class="btn" style="white-space:nowrap" onclick="newcomer()">
+         + Newcomer</button>
+     </div>
      <table><thead><tr>
        <th style="width:70px">Present</th><th>Member</th><th>Group</th><th>Service</th><th>How</th>
      </tr></thead><tbody>
@@ -889,6 +894,67 @@ async function loadSheet(id,name,date,q=''){
   b.oninput=e=>{clearTimeout(window._t);
     window._t=setTimeout(()=>loadSheet(id,name,date,e.target.value),300)};
   b.focus(); b.setSelectionRange(b.value.length,b.value.length);
+}
+
+/**
+ * A first-timer, at the door, with a queue behind them.
+ *
+ * ONE action: register them AND mark them present. Name is the only required
+ * field — everything else can be filled in later by somebody sitting down.
+ * A visitor lost because the form was too long is a visitor lost forever.
+ */
+function newcomer(){
+  if(!SESS){ alert('Open a service first.'); return; }
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal"
+      style="max-width:460px">
+    <div class="h" style="font-size:22px;font-weight:500">Someone new</div>
+    <div class="muted" style="margin-bottom:22px;line-height:1.75">
+      They will be registered as a <b style="color:var(--ink)">first timer</b> and marked present
+      at <b style="color:var(--ink)">${esc(SESS.name)}</b>, in one go.
+      Get the name and the number — the rest can wait.</div>
+    <div id="nerr"></div>
+    <div class="gg2">
+      <div class="field"><label>Name</label><input id="n_first" placeholder="Blessing"></div>
+      <div class="field"><label>Surname</label><input id="n_last" placeholder="Adeyemi"></div>
+    </div>
+    <div class="field"><label>Phone</label>
+      <input id="n_phone" placeholder="0803 123 4567" inputmode="tel"></div>
+    <div class="field"><label>Email — free to reach them</label>
+      <input id="n_email" type="email" placeholder="optional, but it costs nothing to text them"></div>
+    <div class="gg2">
+      <div class="field"><label>Gender</label><select id="n_gender">
+        <option value="">—</option><option value="male">Male</option>
+        <option value="female">Female</option></select></div>
+      <div class="field"><label>How did they hear?</label><select id="n_heard">
+        <option value="">—</option><option>Friend or family</option>
+        <option>Crusade or outreach</option><option>Social media</option>
+        <option>Radio or TV</option><option>Walked in</option><option>Other</option>
+      </select></div>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:22px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
+      <button class="btn" style="flex:2" onclick="saveNewcomer()">Register and mark present</button>
+    </div>
+  </div></div>`;
+  setTimeout(()=>$('#n_first')&&$('#n_first').focus(),50);
+}
+
+async function saveNewcomer(){
+  const first=$('#n_first').value.trim();
+  if(!first){$('#nerr').innerHTML='<div class="err">A name, at least.</div>';return}
+  try{
+    await api(`/api/attendance/session/${SESS.id}/newcomer`,{method:'POST',
+      body:JSON.stringify({
+        first_name:first,
+        last_name:$('#n_last').value.trim()||null,
+        phone:$('#n_phone').value.trim()||null,
+        email:$('#n_email').value.trim()||null,
+        gender:$('#n_gender').value||null,
+        how_heard:$('#n_heard').value||null })});
+    close_();
+    await boot();
+    loadSheet(SESS.id, SESS.name, SESS.date);
+  }catch(e){ $('#nerr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
 }
 
 async function toggle(personId,isPresent){

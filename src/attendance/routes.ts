@@ -78,6 +78,28 @@ export function registerAttendanceRoutes(app: FastifyInstance) {
     "/api/attendance/session/:id/unregistered", staff, async (req) =>
       tenantTx(req, (tx) => att.setUnregistered(tx, req.params.id, req.body.count)));
 
+  /**
+   * A newcomer at the door. ONE action: create them AND mark them present.
+   * Name is the only required field.
+   */
+  app.post<{ Params: { id: string }; Body: any }>(
+    "/api/attendance/session/:id/newcomer", staff, async (req, reply) => {
+      const b = req.body as any;
+      if (!b?.first_name?.trim())
+        return reply.code(400).send({ error: "name_required",
+          detail: "A name, at least. Everything else can wait." });
+      const p = await tenantTx(req, (tx) =>
+        att.addNewcomer(tx, req.params.id, b, req.auth!.userId));
+      reply.code(201).send(p);
+    });
+
+  /** The offline scanner flushes newcomers with its queued scans. */
+  app.post<{ Body: { session_id: string; people: any[] } }>(
+    "/api/attendance/newcomers/sync", staff, async (req) =>
+      tenantTx(req, (tx) =>
+        att.syncNewcomers(tx, req.body.session_id, req.body.people ?? [],
+                          req.auth!.userId)));
+
   app.get("/api/attendance/sessions", auth, async (req) =>
     tenantTx(req, (tx) => att.recentSessions(tx)));
 }

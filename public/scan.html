@@ -67,9 +67,29 @@ select{font-family:inherit;font-size:14px;padding:12px;border-radius:12px;border
 #setup p{font-size:13px;color:#8B92A0;line-height:1.7}
 #setup label{font-size:12px;color:#8B92A0;display:block;margin-bottom:7px}
 .err{background:var(--pink-soft);color:var(--pink-dk);padding:12px;border-radius:12px;font-size:13px}
+#newmodal .btn{padding:16px}
 </style>
 </head>
 <body>
+
+<div id="newmodal" style="position:fixed;inset:0;background:rgba(13,15,20,.92);z-index:20;
+     display:none;flex-direction:column;justify-content:center;padding:24px;gap:12px">
+  <div style="font-family:'DM Sans',sans-serif;font-size:22px;font-weight:700">Someone new</div>
+  <p style="font-size:13px;color:#8B92A0;line-height:1.7;margin-bottom:6px">
+    They will be registered as a first timer and marked present. Works with
+    <b style="color:#fff">no internet</b> — it is held on this phone and uploaded with the scans.</p>
+  <div id="nerr2"></div>
+  <input id="nc_first" placeholder="Name" autocomplete="off"
+    style="background:#fff;color:#12141A;font-size:17px;padding:14px">
+  <input id="nc_last" placeholder="Surname (optional)" autocomplete="off"
+    style="background:#fff;color:#12141A;font-size:17px;padding:14px">
+  <input id="nc_phone" placeholder="Phone (optional)" inputmode="tel" autocomplete="off"
+    style="background:#fff;color:#12141A;font-size:17px;padding:14px">
+  <div style="display:flex;gap:10px;margin-top:8px">
+    <button class="btn g" style="flex:1" onclick="closeNew()">Cancel</button>
+    <button class="btn" style="flex:2" onclick="saveNew()">Add and mark present</button>
+  </div>
+</div>
 
 <div id="setup">
   <div style="display:flex;align-items:center;gap:11px;margin-bottom:6px">
@@ -114,8 +134,12 @@ select{font-family:inherit;font-size:14px;padding:12px;border-radius:12px;border
     <div class="st"><div class="l">Queued</div><div class="v" id="nQueue">0</div></div>
     <div class="st"><div class="l">Rate</div><div class="v rate" id="nRate">0.0/s</div></div>
   </div>
-  <button class="btn g" onclick="sync()"><i class="ti ti-cloud-upload"></i>
-    <span id="syncTxt">Upload now</span></button>
+  <div style="display:flex;gap:8px">
+    <button class="btn" style="flex:1" onclick="newcomer()">
+      <i class="ti ti-user-plus"></i> Someone new</button>
+    <button class="btn g" style="flex:1" onclick="sync()"><i class="ti ti-cloud-upload"></i>
+      <span id="syncTxt">Upload</span></button>
+  </div>
   <div class="recent" id="recent"></div>
 </div>
 
@@ -124,15 +148,54 @@ const $=s=>document.querySelector(s);
 let CHURCH='', SESSION=null, ROSTER=new Map(), QUEUE=[], SEEN=new Set();
 let scanner=null, times=[], DEVICE='gate-'+Math.random().toString(36).slice(2,7);
 
+/**
+ * Newcomers captured at the gate, with no signal.
+ *
+ * The usher cannot go and find a laptop. So: name, phone, done — held on THIS
+ * phone in localStorage, and uploaded with the scans when the signal returns.
+ * Losing a first-timer because the network was down is not acceptable.
+ */
+let NEW=[];
+
 /* ---------------- persistence: survives a phone reboot ---------------- */
 const S={
   save(){ try{ localStorage.setItem('hispren_scan', JSON.stringify({
       church:CHURCH, session:SESSION, queue:QUEUE, seen:[...SEEN],
-      roster:[...ROSTER.entries()] })); }catch(e){} },
+      newcomers:NEW, roster:[...ROSTER.entries()] })); }catch(e){} },
   load(){ try{ const d=JSON.parse(localStorage.getItem('hispren_scan')||'null'); if(!d)return null;
       CHURCH=d.church; SESSION=d.session; QUEUE=d.queue||[];
-      SEEN=new Set(d.seen||[]); ROSTER=new Map(d.roster||[]); return d; }catch(e){ return null } }
+      SEEN=new Set(d.seen||[]); NEW=d.newcomers||[]; ROSTER=new Map(d.roster||[]); return d; }catch(e){ return null } }
 };
+
+function newcomer(){
+  if(!SESSION) return;
+  document.getElementById('newmodal').style.display='flex';
+  setTimeout(()=>$('#nc_first').focus(),60);
+  if(scanner) scanner.pause(true);
+}
+function closeNew(){
+  document.getElementById('newmodal').style.display='none';
+  $('#nc_first').value=$('#nc_last').value=$('#nc_phone').value='';
+  $('#nerr2').innerHTML='';
+  if(scanner) try{scanner.resume()}catch(e){}
+}
+function saveNew(){
+  const f=$('#nc_first').value.trim();
+  if(!f){ $('#nerr2').innerHTML='<div class="err">A name, at least.</div>'; return; }
+  NEW.push({
+    first_name:f,
+    last_name:$('#nc_last').value.trim()||null,
+    phone:$('#nc_phone').value.trim()||null,
+    recorded_at:new Date().toISOString(),
+  });
+  S.save();
+  closeNew();
+  flash('ok', f, 'Registered as a first timer');
+  buzz([60]);
+  addRecent(f + " (new)");
+  paint();
+  if(navigator.onLine) sync();
+}
 
 async function api(p,o={}){
   const r=await fetch(p,{...o,headers:{'Content-Type':'application/json','X-Church':CHURCH,
@@ -188,7 +251,7 @@ async function begin(){
     $('#flash .who').textContent='No camera';
     $('#flash .sub').textContent='Allow camera access, then reload.';
   }
-  setInterval(()=>{ if(navigator.onLine && QUEUE.length) sync(); }, 20000);
+  setInterval(()=>{ if(navigator.onLine && (QUEUE.length||NEW.length)) sync(); }, 20000);
 }
 
 /* -------------------- the scan: ZERO network calls -------------------- */
@@ -235,11 +298,12 @@ function addRecent(n){
 }
 
 function paint(){
-  $('#nPresent').textContent=SEEN.size;
-  $('#nQueue').textContent=QUEUE.length;
+  const pending = QUEUE.length + NEW.length;
+  $('#nPresent').textContent=SEEN.size + NEW.length;
+  $('#nQueue').textContent=pending;
   const q=$('#queue');
-  q.style.display=QUEUE.length?'inline-block':'none';
-  q.textContent=QUEUE.length+' waiting';
+  q.style.display=pending?'inline-block':'none';
+  q.textContent=pending+' waiting';
 
   // scans per second over the last 30s — the number that tells you if the gate
   // is backing up. Above ~2/s and the queue outside is growing.
@@ -261,22 +325,32 @@ setInterval(paint,3000);
 /* ---------------------------- sync ----------------------------------- */
 let syncing=false;
 async function sync(){
-  if(syncing||!QUEUE.length||!navigator.onLine) return;
+  if(syncing||(!QUEUE.length&&!NEW.length)||!navigator.onLine) return;
   syncing=true;
-  $('#syncTxt').textContent='Uploading '+QUEUE.length+'…';
+  $('#syncTxt').textContent='Uploading '+(QUEUE.length+NEW.length)+'…';
   const batch=QUEUE.slice();
+  const newBatch=NEW.slice();
   try{
-    const r=await api('/api/attendance/sync',{method:'POST',
-      body:JSON.stringify({session_id:SESSION.id, scans:batch})});
-    QUEUE=QUEUE.slice(batch.length);   // only drop what we actually sent
+    // Newcomers FIRST — a scan for a person who does not exist yet would fail.
+    if(newBatch.length){
+      await api('/api/attendance/newcomers/sync',{method:'POST',
+        body:JSON.stringify({session_id:SESSION.id, people:newBatch})});
+      NEW=NEW.slice(newBatch.length);
+    }
+    let r={accepted:0,duplicates:0};
+    if(batch.length){
+      r=await api('/api/attendance/sync',{method:'POST',
+        body:JSON.stringify({session_id:SESSION.id, scans:batch})});
+      QUEUE=QUEUE.slice(batch.length);   // only drop what we actually sent
+    }
     S.save();
-    $('#syncTxt').textContent=`Uploaded ${r.accepted}`
-      + (r.duplicates?` · ${r.duplicates} already there`:'');
-    setTimeout(()=>$('#syncTxt').textContent='Upload now',2500);
+    $('#syncTxt').textContent=`Uploaded ${r.accepted + newBatch.length}`
+      + (r.duplicates?` · ${r.duplicates} dup`:'');
+    setTimeout(()=>$('#syncTxt').textContent='Upload',2500);
   }catch(e){
-    // Keep the queue. Never lose a scan because the network blinked.
+    // Keep everything. Never lose a scan OR a first-timer because the network blinked.
     $('#syncTxt').textContent='No signal — held on this phone';
-    setTimeout(()=>$('#syncTxt').textContent='Upload now',2500);
+    setTimeout(()=>$('#syncTxt').textContent='Upload',2500);
   }
   syncing=false; paint();
 }

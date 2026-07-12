@@ -231,3 +231,75 @@ export async function recentSessions(tx: Tx, limit = 20) {
       LIMIT $1`, [limit]);
   return rows;
 }
+
+
+/**
+ * A NEWCOMER, AT THE DOOR.
+ *
+ * Someone walks in who is not on the roll. An usher has fifteen seconds, one
+ * free hand, and a queue behind them. Registering them must be ONE action that
+ * both creates the person AND marks them present — not a trip to the Members
+ * screen and back.
+ *
+ * Name is the only required field. Everything else can be filled in later by
+ * somebody sitting down. A visitor lost because the form was too long is a
+ * visitor lost forever.
+ */
+export async function addNewcomer(
+  tx: Tx,
+  sessionId: string,
+  d: { first_name: string; last_name?: string; phone?: string; email?: string;
+       gender?: string; how_heard?: string; recorded_at?: string },
+  userId: string
+) {
+  const { createMember } = await import("../members/service");
+
+  const stage = await tx.query(
+    `SELECT id FROM journey_stages WHERE key = 'first_timer' LIMIT 1`);
+
+  // The service they walked into — inferred from the session, not asked for.
+  const sess = await tx.query(
+    `SELECT sv.name AS service FROM attendance_sessions s
+       JOIN services sv ON sv.id = s.service_id WHERE s.id = $1`, [sessionId]);
+
+  const person = await createMember(tx, {
+    first_name: d.first_name,
+    last_name: d.last_name || null,
+    phone: d.phone || null,
+    email: d.email || null,
+    gender: (d.gender as any) || null,
+    usual_service: sess.rows[0]?.service ?? null,
+    journey_stage_id: stage.rows[0]?.id ?? null,
+    source: "visitor_card",
+    custom: d.how_heard ? { how_did_you_hear: d.how_heard } : undefined,
+  }, userId);
+
+  // ...and mark them present in the same breath.
+  await tx.query(
+    `INSERT INTO attendance (tenant_id, session_id, person_id, method, recorded_at, recorded_by)
+     VALUES (current_tenant_id(), $1, $2, 'manual', $3, $4)
+     ON CONFLICT (session_id, person_id) DO NOTHING`,
+    [sessionId, person.id, d.recorded_at ?? new Date().toISOString(), userId]);
+
+  await publish(tx, {
+    type: "visitor.registered", entityType: "person", entityId: person.id,
+    payload: { session_id: sessionId, at_the_door: true },
+  });
+
+  return person;
+}
+
+/** The offline scanner flushes newcomers alongside its queued scans. */
+export async function syncNewcomers(
+  tx: Tx, sessionId: string,
+  people: Array<{ first_name: string; last_name?: string; phone?: string;
+                  recorded_at: string }>,
+  userId: string
+) {
+  const made: string[] = [];
+  for (const p of people) {
+    try { made.push((await addNewcomer(tx, sessionId, p, userId)).id); }
+    catch (e: any) { console.error("newcomer sync failed:", e.message); }
+  }
+  return { created: made.length };
+}
