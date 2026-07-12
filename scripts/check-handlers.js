@@ -61,6 +61,21 @@ for (const file of fs.readdirSync(DIR).filter((f) => f.endsWith(".html"))) {
     }
   }
 
+  // ---- 2b. duplicate nav items -------------------------------------------
+  // Two <div class="nav" data-v="messages"> renders "Messages" twice in the
+  // sidebar. It looks like a bug to the user because it IS one, and no linter
+  // sees it — it is markup, not code. Same class of bug as a duplicate route.
+  const navs = new Map();
+  for (const m of html.matchAll(/data-v="([a-z]+)"/g)) {
+    navs.set(m[1], (navs.get(m[1]) ?? 0) + 1);
+  }
+  for (const [v, n] of navs) {
+    if (n > 1) {
+      console.error(`\n  ${file}  nav item "${v}" appears ${n} times — it will render twice`);
+      failures++;
+    }
+  }
+
   let broken = 0;
   for (const [fn, sample] of called) {
     if (!defined.has(fn)) {
