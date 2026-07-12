@@ -173,10 +173,14 @@ tr.flag:hover{background:#F7DFDF}
     <div class="nav on" data-v="home"       onclick="go('home')"><i class="ti ti-layout-dashboard"></i>Overview</div>
     <div class="nav"    data-v="members"    onclick="go('members')"><i class="ti ti-users"></i>Members</div>
     <div class="nav"    data-v="attendance" onclick="go('attendance')"><i class="ti ti-qrcode"></i>Attendance</div>
+    <div class="nav"    data-v="groups"     onclick="go('groups')"><i class="ti ti-sitemap"></i>Groups</div>
+    <div class="nav"    data-v="calendar"   onclick="go('calendar')"><i class="ti ti-calendar"></i>Calendar</div>
+    <div class="nav"    data-v="reports"    onclick="go('reports')"><i class="ti ti-chart-line"></i>Reports</div>
     <div class="slab">Data</div>
     <div class="nav"    data-v="duplicates" onclick="go('duplicates')"><i class="ti ti-copy"></i>Duplicates<span id="dBadge"></span></div>
     <div class="nav"    data-v="import"     onclick="go('import')"><i class="ti ti-file-import"></i>Import</div>
     <div class="nav"    data-v="export"     onclick="go('export')"><i class="ti ti-download"></i>Export</div>
+    <div class="nav"    data-v="settings"   onclick="go('settings')"><i class="ti ti-settings"></i>Settings</div>
     <div class="who">
       <div class="av" id="pAv">—</div>
       <div style="flex:1;min-width:0">
@@ -198,7 +202,7 @@ tr.flag:hover{background:#F7DFDF}
 <div id="modal"></div>
 
 <script>
-let CHURCH='', ME=null, DUPES=[], MEMBERS=[], STAGES=[], GROUPS=[], STATES=[];
+let CHURCH='', ME=null, DUPES=[], MEMBERS=[], STAGES=[], GROUPS=[], STATES=[], FIELDS=[];
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ini=n=>(n||'?').split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase();
@@ -229,17 +233,20 @@ async function boot(){
   $('#pName').textContent=ME.tenant.name; $('#pAv').textContent=ini(ME.tenant.name);
   MEMBERS=(await api('/api/members?limit=300')).members;
   DUPES=await api('/api/duplicates').catch(()=>[]);
-  [STAGES,GROUPS,STATES]=await Promise.all([
+  [STAGES,GROUPS,STATES,FIELDS]=await Promise.all([
     api('/api/stages').catch(()=>[]),
     api('/api/groups').catch(()=>[]),
-    api('/api/states').catch(()=>[])]);
+    api('/api/states').catch(()=>[]),
+    api('/api/church/fields').catch(()=>[])]);
   $('#dBadge').outerHTML=DUPES.length?`<span class="n" id="dBadge">${DUPES.length}</span>`:'<span id="dBadge"></span>';
   go('home');
 }
 function head(t,s,a=''){ $('#hTitle').textContent=t; $('#hSub').textContent=s; $('#hActs').innerHTML=a; }
 function go(v){
   document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('on',n.dataset.v===v));
-  ({home:viewHome,members:viewMembers,attendance:viewAtt,duplicates:viewDupes,import:viewImport,export:viewExport})[v]();
+  ({home:viewHome,members:viewMembers,attendance:viewAtt,groups:viewGroups,calendar:viewCal,
+    reports:viewReports,duplicates:viewDupes,import:viewImport,export:viewExport,
+    settings:viewSettings})[v]();
 }
 
 /* ============================== OVERVIEW ============================== */
@@ -256,7 +263,7 @@ function viewHome(){
   const gs=[...new Set(MEMBERS.map(m=>m.home_group_name).filter(Boolean))];
 
   head('Overview', ME.tenant.name,
-    `<button class="btn-o btn" onclick="go('attendance')">Attendance</button>
+    `<button class="btn btn-o" onclick="visitorCard()">Visitor card</button>
      <button class="btn" onclick="openForm()">Register member</button>`);
 
   $('#view').innerHTML=`
@@ -394,6 +401,16 @@ async function openMember(id){
     ${f('Work or school',m.occupation)}${f('Place of work',m.workplace)}
     ${f('Registered via',m.source)}
 
+    ${FIELDS.length?`<div class="sect">${esc(ME.tenant.name)}</div>
+      ${FIELDS.map(fd=>{
+        const v=(m.custom||{})[fd.key];
+        if(v===undefined||v===null||v==='') return '';
+        const show = fd.field_type==='boolean' ? (v?'Yes':'No')
+                   : fd.field_type==='date'    ? String(v).slice(0,10) : v;
+        return `<div class="row"><span class="k">${esc(fd.label)}</span>
+                <span class="v">${esc(show)}</span></div>`;
+      }).join('')||'<div class="muted">Nothing recorded.</div>'}`:''}
+
     ${canHealth?`<div class="sect">Health — pastor only. This view was logged.</div>
       ${h?`<div class="row"><span class="k">Genotype</span>
             <span class="tag ${carrier?'t-r':'t-g'}">${esc(h.genotype||'—')}</span></div>
@@ -483,6 +500,29 @@ async function editMember(id){
       ${t('post_held','Post held')}
     </div>
 
+    ${FIELDS.length?`<div class="sect">${esc(ME.tenant.name)}</div>
+      <div class="gg2">
+      ${FIELDS.map(fd=>{
+        const cur=(m.custom||{})[fd.key];
+        if(fd.field_type==='boolean')
+          return `<div class="field"><label>${esc(fd.label)}</label>
+            <select id="c_${fd.key}">
+              <option value="">—</option>
+              <option value="true" ${cur===true?'selected':''}>Yes</option>
+              <option value="false" ${cur===false?'selected':''}>No</option>
+            </select></div>`;
+        if(fd.field_type==='select')
+          return `<div class="field"><label>${esc(fd.label)}</label>
+            <select id="c_${fd.key}"><option value="">—</option>
+            ${(fd.options||[]).map(o=>`<option ${o===cur?'selected':''}>${esc(o)}</option>`).join('')}
+            </select></div>`;
+        const ty = fd.field_type==='date' ? 'date'
+                 : fd.field_type==='number' ? 'number' : 'text';
+        return `<div class="field"><label>${esc(fd.label)}</label>
+          <input id="c_${fd.key}" type="${ty}" value="${esc(cur??'')}"></div>`;
+      }).join('')}
+      </div>`:''}
+
     <div style="display:flex;gap:12px;margin-top:28px">
       <button class="btn btn-o" style="flex:1" onclick="openMember('${id}')">Cancel</button>
       <button class="btn" style="flex:2" onclick="saveEdit('${id}')">Save changes</button>
@@ -499,6 +539,19 @@ async function saveEdit(id){
   // Send every field, including blanks — clearing a wrong phone number must
   // actually clear it, not silently keep the old value.
   ks.forEach(k=>{ const el=$('#e_'+k); if(el) b[k]=el.value.trim()||null; });
+
+  // custom fields — the church's own denomination-specific questions
+  if(FIELDS.length){
+    const c={};
+    FIELDS.forEach(fd=>{
+      const el=$('#c_'+fd.key); if(!el) return;
+      const v=el.value.trim();
+      if(v==='') return;
+      c[fd.key] = fd.field_type==='boolean' ? (v==='true')
+                : fd.field_type==='number'  ? Number(v) : v;
+    });
+    b.custom=c;
+  }
   if(!b.first_name){$('#eerr').innerHTML='<div class="err">A first name is required.</div>';return}
   try{
     await api('/api/members/'+id,{method:'PATCH',body:JSON.stringify(b)});
@@ -852,6 +905,512 @@ async function commit(){
     body:JSON.stringify({batch_id:i.batch_id,csv:i.csv,column_map:i.column_map})});
   alert(`Imported ${r.imported}. Skipped ${r.skipped}.`);
   await boot(); go('members');
+}
+
+
+/* =============================== GROUPS ============================== */
+async function viewGroups(){
+  const tree=await api('/api/church/groups');
+  head('Groups', `${tree.length} in the hierarchy`,
+    `<button class="btn" onclick="editGroup()">New group</button>`);
+  $('#view').innerHTML=`
+   <div class="card" style="margin-bottom:16px">
+     <div class="muted" style="line-height:1.8">
+       One structure holds them all — <b style="color:var(--ink)">headquarters → zone → branch →
+       cell</b> for a Pentecostal church, <b style="color:var(--ink)">diocese → parish → station</b>
+       for a Catholic one. <b style="color:var(--ink)">Direct</b> is people pinned to that group.
+       <b style="color:var(--ink)">Whole tree</b> includes everyone below it.</div>
+   </div>
+   <div class="card">
+     ${tree.length?`<table><thead><tr>
+       <th>Group</th><th>Type</th><th>Leader</th><th>Direct</th><th>Whole tree</th><th>Meets</th><th></th>
+     </tr></thead><tbody>
+     ${tree.map(g=>`<tr onclick="openGroup('${g.id}')">
+       <td><div style="display:flex;align-items:center;gap:10px;padding-left:${g.depth*20}px">
+         <span style="width:9px;height:9px;border-radius:2px;background:${esc(g.colour)};flex-shrink:0"></span>
+         <span style="font-weight:600;color:var(--ink)">${esc(g.name)}</span></div></td>
+       <td><span class="tag t-n">${esc(g.group_type)}</span></td>
+       <td class="muted">${esc(g.leader_name||'—')}</td>
+       <td class="num" style="color:var(--ink)">${g.direct_members}</td>
+       <td class="num" style="color:var(--muted)">${g.total_members}</td>
+       <td class="muted">${esc(g.meets_on||'—')}${g.meets_at?' '+String(g.meets_at).slice(0,5):''}</td>
+       <td><i class="ti ti-chevron-right" style="color:var(--faint)"></i></td>
+     </tr>`).join('')}</tbody></table>`
+     :'<div class="muted">No groups yet. Create the headquarters or the main church first.</div>'}
+   </div>`;
+}
+
+async function openGroup(id){
+  const g=await api('/api/church/groups/'+id);
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:8px">
+      <div style="width:44px;height:44px;border-radius:9px;background:${esc(g.colour)};
+        display:flex;align-items:center;justify-content:center">
+        <i class="ti ti-users-group" style="color:#fff;font-size:22px"></i></div>
+      <div style="flex:1;min-width:0">
+        <div class="h" style="font-size:22px;font-weight:500">${esc(g.name)}</div>
+        <div class="muted">${esc(g.path||'')}</div></div>
+      <button class="btn" onclick="editGroup('${id}')">Edit</button></div>
+    ${g.description?`<div class="muted" style="margin:14px 0;line-height:1.7">${esc(g.description)}</div>`:''}
+
+    <div class="kpis" style="margin:20px 0">
+      <div class="kpi acc"><div class="l">Direct</div><div class="v">${g.direct_members||0}</div></div>
+      <div class="kpi"><div class="l">Whole tree</div><div class="v">${g.total_members||0}</div></div>
+      <div class="kpi"><div class="l">Type</div>
+        <div class="v" style="font-size:18px;padding-top:8px">${esc(g.group_type)}</div></div>
+    </div>
+
+    ${g.meets_on||g.meets_where?`<div class="sect">Meets</div>
+      <div class="row"><span class="k">When</span><span class="v">${esc(g.meets_on||'—')}
+        ${g.meets_at?String(g.meets_at).slice(0,5):''}</span></div>
+      ${g.meets_where?`<div class="row"><span class="k">Where</span>
+        <span class="v">${esc(g.meets_where)}</span></div>`:''}`:''}
+
+    <div class="sect">People — ${(g.members||[]).length}</div>
+    <div style="max-height:280px;overflow-y:auto">
+      ${(g.members||[]).map(p=>`<div class="li">
+        <div class="av">${ini(p.name)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;color:var(--ink)">${esc(p.name)}</div>
+          <div class="muted">${esc(p.phone||'no phone')} · ${esc(p.stage||'')}</div></div>
+        <span class="tag ${p.role==='leader'?'t-b':'t-n'}">${esc(p.role)}</span>
+        <i class="ti ti-x" style="color:var(--faint);cursor:pointer;font-size:18px"
+           onclick="event.stopPropagation();rmGroup('${id}','${p.id}')"></i>
+      </div>`).join('')||'<div class="muted">Nobody assigned yet.</div>'}
+    </div>
+
+    <div class="sect">Add someone</div>
+    <div style="display:flex;gap:10px">
+      <select id="ga_p" style="flex:2">
+        ${MEMBERS.map(m=>`<option value="${m.id}">${esc(m.full_name)}</option>`).join('')}
+      </select>
+      <select id="ga_r" style="flex:1">
+        <option value="member">Member</option><option value="worker">Worker</option>
+        <option value="assistant_leader">Assistant leader</option><option value="leader">Leader</option>
+      </select>
+      <button class="btn" onclick="addGroup('${id}')">Add</button>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:28px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Close</button>
+      <button class="btn btn-o" style="color:var(--bad);border-color:var(--bad-soft)"
+        onclick="delGroup('${id}','${esc(g.name)}')">Archive</button>
+    </div>
+  </div></div>`;
+}
+
+async function addGroup(id){
+  await api(`/api/church/groups/${id}/members`,{method:'POST',
+    body:JSON.stringify({person_id:$('#ga_p').value, role:$('#ga_r').value})});
+  await boot(); openGroup(id);
+}
+async function rmGroup(gid,pid){
+  await api(`/api/church/groups/${gid}/members/${pid}`,{method:'DELETE'});
+  await boot(); openGroup(gid);
+}
+async function delGroup(id,name){
+  if(!confirm(`Archive "${name}"?\n\nAnything beneath it moves up a level — nothing is orphaned. `
+    +`Attendance history is kept.`))return;
+  await api('/api/church/groups/'+id,{method:'DELETE'});
+  close_(); await boot(); go('groups');
+}
+
+async function editGroup(id){
+  const g = id ? await api('/api/church/groups/'+id) : {};
+  const tree=await api('/api/church/groups');
+  const V=k=>esc(g[k]??'');
+  const TYPES=['headquarters','region','province','zone','area','branch','campus',
+    'department','unit','team','cell','fellowship','house_fellowship','society',
+    'diocese','parish','station'];
+  const DAYS=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div class="h" style="font-size:22px;font-weight:500">${id?'Edit group':'New group'}</div>
+    <div class="muted" style="margin-bottom:26px">
+      Nest it under a parent to build the hierarchy. A group cannot sit inside one of its own branches.</div>
+    <div id="gerr"></div>
+    <div class="field"><label>Name</label><input id="g_name" value="${V('name')}"></div>
+    <div class="gg2">
+      <div class="field"><label>Type</label><select id="g_type">
+        ${TYPES.map(t=>`<option value="${t}" ${t===g.group_type?'selected':''}>${t.replace(/_/g,' ')}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Sits under</label><select id="g_parent">
+        <option value="">— top level —</option>
+        ${tree.filter(x=>x.id!==id).map(x=>`<option value="${x.id}" ${x.id===g.parent_id?'selected':''}>
+          ${'&nbsp;'.repeat(x.depth*3)}${esc(x.name)}</option>`).join('')}
+      </select></div>
+    </div>
+    <div class="gg2">
+      <div class="field"><label>Leader</label><select id="g_leader">
+        <option value="">—</option>
+        ${MEMBERS.map(m=>`<option value="${m.id}" ${m.id===g.leader_id?'selected':''}>${esc(m.full_name)}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Colour</label>
+        <input id="g_colour" type="color" value="${g.colour||'#4338CA'}" style="height:42px;padding:4px"></div>
+    </div>
+    <div class="sect">Meeting (cells and departments)</div>
+    <div class="g3">
+      <div class="field"><label>Day</label><select id="g_day">
+        <option value="">—</option>
+        ${DAYS.map(d=>`<option value="${d}" ${d===g.meets_on?'selected':''}>${d}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Time</label>
+        <input id="g_time" type="time" value="${(g.meets_at||'').slice(0,5)}"></div>
+      <div class="field"><label>Where</label><input id="g_where" value="${V('meets_where')}"></div>
+    </div>
+    <div class="field"><label>Description</label><input id="g_desc" value="${V('description')}"></div>
+    <div style="display:flex;gap:12px;margin-top:28px">
+      <button class="btn btn-o" style="flex:1" onclick="${id?`openGroup('${id}')`:'close_()'}">Cancel</button>
+      <button class="btn" style="flex:2" onclick="saveGroup(${id?`'${id}'`:'null'})">Save</button>
+    </div>
+  </div></div>`;
+}
+async function saveGroup(id){
+  const b={ name:$('#g_name').value.trim(), group_type:$('#g_type').value,
+    parent_id:$('#g_parent').value||null, leader_id:$('#g_leader').value||null,
+    meets_on:$('#g_day').value||null, meets_at:$('#g_time').value||null,
+    meets_where:$('#g_where').value.trim()||null, description:$('#g_desc').value.trim()||null,
+    colour:$('#g_colour').value };
+  if(!b.name){$('#gerr').innerHTML='<div class="err">A name is required.</div>';return}
+  try{
+    if(id) await api('/api/church/groups/'+id,{method:'PATCH',body:JSON.stringify(b)});
+    else    await api('/api/church/groups',{method:'POST',body:JSON.stringify(b)});
+    close_(); await boot(); go('groups');
+  }catch(e){ $('#gerr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
+}
+
+/* ============================== CALENDAR ============================= */
+const KINDS=['sunday','midweek','cell','prayer','vigil','special','crusade',
+             'conference','convention','wedding','burial','dedication','training'];
+const DAYNAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+async function viewCal(){
+  const cal=await api('/api/church/calendar');
+  const recurring=cal.filter(c=>!c.event_date);
+  const events=cal.filter(c=>c.event_date);
+  head('Calendar', `${recurring.length} recurring · ${events.length} upcoming`,
+    `<button class="btn" onclick="editService()">Add to calendar</button>`);
+  const card=(c)=>`<div class="li" onclick="editService('${c.id}')" style="cursor:pointer">
+      <div class="g" style="background:${esc(c.colour)}">
+        <i class="ti ti-${c.event_date?'confetti':'building-church'}"></i></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;color:var(--ink)">${esc(c.name)}</div>
+        <div class="muted">
+          ${c.event_date
+            ? new Date(c.event_date).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
+            : DAYNAMES[c.day_of_week]+'s'}
+          ${c.start_time?' · '+String(c.start_time).slice(0,5):''}
+          ${c.end_time?'–'+String(c.end_time).slice(0,5):''}
+          ${c.location?' · '+esc(c.location):''}
+        </div></div>
+      ${c.sessions_held?`<span class="muted">${c.sessions_held} held</span>`:''}
+      <span class="tag t-n">${esc(c.kind)}</span>
+      <i class="ti ti-pencil" style="color:var(--faint)"></i>
+    </div>`;
+  $('#view').innerHTML=`
+   <div class="card" style="margin-bottom:16px">
+     <div class="ch"><i class="ti ti-repeat"></i><h3>Every week</h3>
+       <span class="r">${recurring.length}</span></div>
+     ${recurring.map(card).join('')||'<div class="muted">No recurring services.</div>'}
+   </div>
+   <div class="card">
+     <div class="ch"><i class="ti ti-confetti"></i><h3>One-off events</h3>
+       <span class="r">${events.length}</span></div>
+     <div class="muted" style="margin-bottom:14px;line-height:1.7">
+       Crusades, conventions, weddings, burials. They take attendance exactly the same way —
+       open the scanner or the mark sheet.</div>
+     ${events.map(card).join('')||'<div class="muted">Nothing scheduled.</div>'}
+   </div>`;
+}
+
+async function editService(id){
+  const cal=await api('/api/church/calendar');
+  const c = id ? cal.find(x=>x.id===id)||{} : {};
+  const oneOff = !!c.event_date;
+  const V=k=>esc(c[k]??'');
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div class="h" style="font-size:22px;font-weight:500">${id?'Edit':'Add to calendar'}</div>
+    <div class="muted" style="margin-bottom:26px">
+      A <b style="color:var(--ink)">recurring service</b> repeats on a weekday. A
+      <b style="color:var(--ink)">one-off event</b> happens on a date. Both take attendance
+      identically.</div>
+    <div id="cerr"></div>
+    <div class="field"><label>Name</label><input id="c_name" value="${V('name')}"
+      placeholder="2nd Service, or Annual Convention 2026"></div>
+    <div class="gg2">
+      <div class="field"><label>Kind</label><select id="c_kind" onchange="calKind()">
+        ${KINDS.map(k=>`<option value="${k}" ${k===c.kind?'selected':''}>${k}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Repeats or one-off</label><select id="c_mode" onchange="calMode()">
+        <option value="recurring" ${!oneOff?'selected':''}>Repeats every week</option>
+        <option value="oneoff" ${oneOff?'selected':''}>Happens once</option>
+      </select></div>
+    </div>
+    <div class="gg2">
+      <div class="field" id="c_dayF" style="${oneOff?'display:none':''}">
+        <label>Day</label><select id="c_day">
+          ${DAYNAMES.map((d,i)=>`<option value="${i}" ${i===c.day_of_week?'selected':''}>${d}</option>`).join('')}
+        </select></div>
+      <div class="field" id="c_dateF" style="${oneOff?'':'display:none'}">
+        <label>Date</label><input id="c_date" type="date" value="${(c.event_date||'').slice(0,10)}"></div>
+      <div class="field"><label>Colour</label>
+        <input id="c_colour" type="color" value="${c.colour||'#4338CA'}" style="height:42px;padding:4px"></div>
+    </div>
+    <div class="gg2">
+      <div class="field"><label>Starts</label>
+        <input id="c_start" type="time" value="${(c.start_time||'').slice(0,5)}"></div>
+      <div class="field"><label>Ends</label>
+        <input id="c_end" type="time" value="${(c.end_time||'').slice(0,5)}"></div>
+    </div>
+    <div class="gg2">
+      <div class="field"><label>Location</label><input id="c_loc" value="${V('location')}"></div>
+      <div class="field"><label>Expected</label>
+        <input id="c_exp" type="number" min="0" value="${c.expected??''}"></div>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:28px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
+      ${id?`<button class="btn btn-o" style="color:var(--bad);border-color:var(--bad-soft)"
+        onclick="delService('${id}','${esc(c.name)}')">Archive</button>`:''}
+      <button class="btn" style="flex:2" onclick="saveService(${id?`'${id}'`:'null'})">Save</button>
+    </div>
+  </div></div>`;
+}
+function calMode(){
+  const one=$('#c_mode').value==='oneoff';
+  $('#c_dayF').style.display  = one?'none':'';
+  $('#c_dateF').style.display = one?'':'none';
+}
+function calKind(){
+  // a crusade or a wedding is obviously a one-off — pre-select it for them
+  const k=$('#c_kind').value;
+  if(['special','crusade','conference','convention','wedding','burial','dedication','training'].includes(k)){
+    $('#c_mode').value='oneoff'; calMode();
+  }
+}
+async function saveService(id){
+  const one=$('#c_mode').value==='oneoff';
+  const b={ name:$('#c_name').value.trim(), kind:$('#c_kind').value,
+    day_of_week: one?null:Number($('#c_day').value),
+    event_date:  one?($('#c_date').value||null):null,
+    start_time:$('#c_start').value||null, end_time:$('#c_end').value||null,
+    location:$('#c_loc').value.trim()||null,
+    expected:$('#c_exp').value?Number($('#c_exp').value):null,
+    colour:$('#c_colour').value };
+  if(!b.name){$('#cerr').innerHTML='<div class="err">A name is required.</div>';return}
+  if(one&&!b.event_date){$('#cerr').innerHTML='<div class="err">A one-off event needs a date.</div>';return}
+  try{
+    if(id) await api('/api/church/calendar/'+id,{method:'PATCH',body:JSON.stringify(b)});
+    else    await api('/api/church/calendar',{method:'POST',body:JSON.stringify(b)});
+    close_(); go('calendar');
+  }catch(e){ $('#cerr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
+}
+async function delService(id,name){
+  if(!confirm(`Archive "${name}"?\n\nAttendance already recorded against it is kept.`))return;
+  await api('/api/church/calendar/'+id,{method:'DELETE'});
+  close_(); go('calendar');
+}
+
+/* =============================== REPORTS ============================= */
+async function viewReports(){
+  const [trend,growth,funnel,risk]=await Promise.all([
+    api('/api/reports/trend?weeks=12').catch(()=>[]),
+    api('/api/reports/growth?months=6').catch(()=>[]),
+    api('/api/reports/funnel').catch(()=>[]),
+    api('/api/reports/at-risk?weeks=3').catch(()=>[])]);
+  head('Reports','The four questions a pastor actually asks');
+
+  const byDate={};
+  trend.forEach(t=>{ byDate[t.session_date]=(byDate[t.session_date]||0)+t.present; });
+  const dates=Object.keys(byDate).sort();
+  const peak=Math.max(1,...Object.values(byDate));
+  const total=funnel.reduce((a,f)=>a+f.people,0);
+
+  $('#view').innerHTML=`
+   <div class="g2" style="margin-bottom:16px">
+     <div class="card">
+       <div class="ch"><i class="ti ti-chart-line"></i><h3>Attendance, last 12 weeks</h3></div>
+       ${dates.length?`<div style="display:flex;align-items:flex-end;gap:5px;height:150px">
+         ${dates.map(d=>`<div style="flex:1;display:flex;flex-direction:column;
+              justify-content:flex-end;align-items:center;gap:5px" title="${d}: ${byDate[d]}">
+           <div class="num" style="font-size:11px;color:var(--muted)">${byDate[d]}</div>
+           <div style="width:100%;background:var(--brand);border-radius:4px 4px 0 0;
+                height:${Math.max(4,byDate[d]/peak*110)}px"></div>
+           <div style="font-size:10px;color:var(--faint)">
+             ${new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div>
+         </div>`).join('')}</div>`
+       :'<div class="muted">No attendance recorded yet. Open a service and mark someone present.</div>'}
+     </div>
+
+     <div class="card">
+       <div class="ch"><i class="ti ti-filter"></i><h3>The funnel</h3>
+         <span class="r">${total} people</span></div>
+       ${funnel.map(f=>{const pct=total?Math.round(f.people/total*100):0;
+         return `<div class="meter">
+           <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+             <span style="font-weight:600;color:var(--ink);font-size:13px">${esc(f.label)}</span>
+             <span class="num">${f.people}</span></div>
+           <div class="bar"><div style="width:${pct}%;background:var(--brand)"></div></div>
+         </div>`;}).join('')}
+       <div class="muted" style="margin-top:12px;line-height:1.7">
+         Where people pile up is where your process is broken.</div>
+     </div>
+   </div>
+
+   <div class="g2">
+     <div class="card">
+       <div class="ch"><i class="ti ti-alert-triangle" style="color:var(--warn)"></i>
+         <h3>At risk</h3><span class="r">${risk.length}</span></div>
+       <div class="muted" style="margin-bottom:14px;line-height:1.7">
+         They came, then stopped. A visitor who never returned is not at risk — they were never
+         yours. <b style="color:var(--ink)">These are people you had, and are losing.</b></div>
+       ${risk.slice(0,8).map(r=>`<div class="li" onclick="openMember('${r.id}')" style="cursor:pointer">
+         <div class="av">${ini(r.name)}</div>
+         <div style="flex:1;min-width:0">
+           <div style="font-weight:600;color:var(--ink)">${esc(r.name)}</div>
+           <div class="muted">${esc(r.phone||'no phone')} · ${esc(r.group_name||'no group')}</div></div>
+         <span class="tag ${r.weeks_away>=6?'t-r':'t-w'}">${r.weeks_away}w away</span>
+       </div>`).join('')||'<div class="muted">Nobody has drifted. Rare, and good.</div>'}
+     </div>
+
+     <div class="card">
+       <div class="ch"><i class="ti ti-user-plus"></i><h3>New registrations</h3></div>
+       ${growth.length?growth.map(g=>{
+         const peakG=Math.max(1,...growth.map(x=>x.registered));
+         return `<div class="meter">
+           <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+             <span style="font-weight:600;color:var(--ink);font-size:13px">
+               ${new Date(g.month).toLocaleDateString('en-GB',{month:'long',year:'numeric'})}</span>
+             <span class="num">${g.registered}</span></div>
+           <div class="bar"><div style="width:${g.registered/peakG*100}%;background:var(--good)"></div></div>
+         </div>`;}).join('')
+       :'<div class="muted">No registrations yet.</div>'}
+     </div>
+   </div>`;
+}
+
+/* =========================== VISITOR CARD =========================== */
+/**
+ * Fast capture at the door. Four fields. An usher has fifteen seconds and one
+ * hand free — a twenty-field form does not get filled in, it gets abandoned,
+ * and the visitor is lost.
+ */
+function visitorCard(){
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal"
+      style="max-width:440px">
+    <div class="h" style="font-size:22px;font-weight:500">Visitor card</div>
+    <div class="muted" style="margin-bottom:24px;line-height:1.7">
+      Four fields. Get the name and the number — everything else can wait until someone
+      calls them.</div>
+    <div id="verr"></div>
+    <div class="field"><label>Name</label>
+      <input id="v_first" placeholder="Blessing" autofocus></div>
+    <div class="field"><label>Surname</label><input id="v_last" placeholder="Adeyemi"></div>
+    <div class="field"><label>Phone</label>
+      <input id="v_phone" placeholder="0803 123 4567" inputmode="tel"></div>
+    <div class="field"><label>Service</label><select id="v_svc">
+      <option value="">—</option><option>1st Service</option>
+      <option selected>2nd Service</option><option>3rd Service</option></select></div>
+    <div style="display:flex;gap:12px;margin-top:24px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
+      <button class="btn" style="flex:2" onclick="saveVisitor()">Save visitor</button>
+    </div>
+  </div></div>`;
+  setTimeout(()=>$('#v_first')&&$('#v_first').focus(),50);
+}
+async function saveVisitor(){
+  const first=$('#v_first').value.trim();
+  if(!first){$('#verr').innerHTML='<div class="err">A name, at least.</div>';return}
+  const stage=(STAGES.find(s=>s.key==='first_timer')||{}).id;
+  try{
+    await api('/api/members',{method:'POST',body:JSON.stringify({
+      first_name:first, last_name:$('#v_last').value.trim()||null,
+      phone:$('#v_phone').value.trim()||null,
+      usual_service:$('#v_svc').value||null,
+      journey_stage_id:stage, source:'visitor_card' })});
+    close_(); await boot(); go('members');
+  }catch(e){ $('#verr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
+}
+
+/* ============================== SETTINGS ============================= */
+async function viewSettings(){
+  const [st,fields]=await Promise.all([
+    api('/api/church/settings'), api('/api/church/fields').catch(()=>[])]);
+  head('Settings', st.name);
+  $('#view').innerHTML=`
+   <div class="card" style="margin-bottom:16px">
+     <div class="ch"><i class="ti ti-building-church"></i><h3>The church</h3></div>
+     <div class="gg2">
+       <div class="field"><label>Name</label><input id="s_name" value="${esc(st.name)}"></div>
+       <div class="field"><label>Address (subdomain)</label>
+         <input value="${esc(st.subdomain)}.hispren.com" disabled
+           style="background:var(--line2);color:var(--muted)"></div>
+     </div>
+     <div class="gg2">
+       <div class="field"><label>Brand colour</label>
+         <input id="s_colour" type="color" value="${st.brand_color||'#4338CA'}"
+           style="height:42px;padding:4px"></div>
+       <div class="field"><label>Plan</label>
+         <input value="${esc(st.plan_tier)} · ${esc(st.member_band)}" disabled
+           style="background:var(--line2);color:var(--muted)"></div>
+     </div>
+     <div style="background:var(--brand-wash);border:1px solid var(--brand-soft);border-radius:9px;
+          padding:16px;display:flex;gap:12px;align-items:flex-start;margin-bottom:18px">
+       <input type="checkbox" id="s_health" ${st.collects_health_data?'checked':''}
+         style="width:18px;height:18px;margin-top:2px;flex-shrink:0">
+       <label for="s_health" style="text-transform:none;letter-spacing:0;font-weight:400;
+         color:var(--body);font-size:13px;line-height:1.7;margin:0;cursor:pointer">
+         <b style="color:var(--ink)">Collect genotype and blood group.</b>
+         For marriage counselling — AS x AS carries a 1-in-4 sickle cell risk. Stored separately,
+         visible only to pastors, every read logged, and never without the member's consent.
+         Leave this off if your church has no use for it.</label>
+     </div>
+     <button class="btn" onclick="saveSettings()">Save</button>
+   </div>
+
+   <div class="card">
+     <div class="ch"><i class="ti ti-forms"></i><h3>Your own fields</h3>
+       <span class="r">${fields.length}</span></div>
+     <div class="muted" style="margin-bottom:16px;line-height:1.8">
+       This is where <b style="color:var(--ink)">your denomination</b> lives. A Pentecostal church
+       asks "are you born again?" A Catholic parish records a confirmation name. Neither belongs
+       in everyone's database — so it lives here, in yours.</div>
+     ${fields.map(f=>`<div class="li">
+       <div class="g" style="background:var(--brand)"><i class="ti ti-forms"></i></div>
+       <div style="flex:1;min-width:0">
+         <div style="font-weight:600;color:var(--ink)">${esc(f.label)}</div>
+         <div class="muted">${esc(f.field_type)}${f.options?' · '+f.options.length+' options':''}</div></div>
+       <i class="ti ti-x" style="color:var(--faint);cursor:pointer;font-size:18px"
+          onclick="delField('${f.id}','${esc(f.label)}')"></i>
+     </div>`).join('')||'<div class="muted">No custom fields.</div>'}
+     <div class="sect">Add a field</div>
+     <div style="display:flex;gap:10px;flex-wrap:wrap">
+       <input id="nf_l" placeholder="Are you born again?" style="flex:2;min-width:200px">
+       <select id="nf_t" style="flex:1;min-width:130px">
+         <option value="text">Text</option><option value="boolean">Yes / no</option>
+         <option value="date">Date</option><option value="number">Number</option>
+         <option value="select">Choose one</option>
+       </select>
+       <button class="btn" onclick="addField()">Add</button>
+     </div>
+   </div>`;
+}
+async function saveSettings(){
+  await api('/api/church/settings',{method:'PATCH',body:JSON.stringify({
+    name:$('#s_name').value.trim(), brand_color:$('#s_colour').value,
+    collects_health_data:$('#s_health').checked })});
+  await boot(); go('settings');
+}
+async function addField(){
+  const label=$('#nf_l').value.trim();
+  if(!label) return;
+  await api('/api/church/fields',{method:'POST',
+    body:JSON.stringify({label, field_type:$('#nf_t').value})});
+  go('settings');
+}
+async function delField(id,label){
+  if(!confirm(`Remove "${label}"?\n\nThe answers already recorded are kept — turn it back on `
+    +`and they reappear.`))return;
+  await api('/api/church/fields/'+id,{method:'DELETE'});
+  go('settings');
 }
 
 (async()=>{

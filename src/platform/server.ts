@@ -14,6 +14,8 @@ import { healthcheck } from "./db";
 import { registerMemberRoutes } from "../members/routes";
 import { registerAttendanceRoutes } from "../attendance/routes";
 import { registerExportRoutes } from "../export/routes";
+import { registerChurchRoutes } from "../church/routes";
+import { registerReportRoutes } from "../reports/routes";
 
 export function buildServer() {
   const app = Fastify({
@@ -89,6 +91,8 @@ export function buildServer() {
   registerMemberRoutes(app);
   registerAttendanceRoutes(app);
   registerExportRoutes(app);
+  registerChurchRoutes(app);
+  registerReportRoutes(app);
 
   return app;
 }
