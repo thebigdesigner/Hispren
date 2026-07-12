@@ -3,24 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<meta name="theme-color" content="#6D4AFF">
+<meta name="theme-color" content="#0D0F14">
 <title>Hispren — Scan</title>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.2.0/dist/tabler-icons.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
-:root{--violet:#6D4AFF;--violet-dk:#5B3FD9;--violet-soft:#EDEBFF;
-  --mint:#2DD4BF;--mint-dk:#0F766E;--mint-soft:#EAFBF8;
-  --pink:#FF6B8A;--pink-dk:#C42F52;--pink-soft:#FFE8EC;
-  --amber:#FB923C;--line:#EFEFF4;--text:#1F2033;--muted:#9A9EB0}
+:root{--violet:#00C389;--violet-dk:#00996B;--violet-soft:#E4F8F0;
+  --mint:#00C389;--mint-dk:#00674A;--mint-soft:#E4F8F0;
+  --pink:#E5484D;--pink-dk:#A81E22;--pink-soft:#FDECEC;
+  --amber:#F5A623;--line:#E8EAEE;--text:#12141A;--muted:#8B92A0}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#12102B;color:#fff;
+body{font-family:'Karla',system-ui,sans-serif;background:#0D0F14;color:#fff;
   min-height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 button{font-family:inherit;border:none;cursor:pointer}
 select{font-family:inherit;font-size:14px;padding:12px;border-radius:12px;border:1px solid var(--line);width:100%}
 
 /* ---- status bar ---- */
-.bar{display:flex;align-items:center;gap:10px;padding:12px 16px;background:#1B1740;flex-shrink:0}
+.bar{display:flex;align-items:center;gap:10px;padding:12px 16px;background:#171A21;flex-shrink:0}
 .bar .n{font-size:13px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chip{font-size:11px;font-weight:700;padding:4px 9px;border-radius:8px;white-space:nowrap}
 .on{background:var(--mint-soft);color:var(--mint-dk)}
@@ -37,35 +37,35 @@ select{font-family:inherit;font-size:14px;padding:12px;border-radius:12px;border
 /* ---- the flash: the ONLY thing an usher looks at ---- */
 #flash{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
   justify-content:center;text-align:center;padding:24px;z-index:5}
-#flash.ok{display:flex;background:rgba(45,212,191,.96)}
-#flash.no{display:flex;background:rgba(255,107,138,.96)}
+#flash.ok{display:flex;background:rgba(0,195,137,.97)}
+#flash.no{display:flex;background:rgba(229,72,77,.97)}
 #flash i{font-size:76px;margin-bottom:14px}
-#flash .who{font-size:32px;font-weight:700;line-height:1.2}
+#flash .who{font-family:'DM Sans',sans-serif;font-size:32px;font-weight:700;line-height:1.2}
 #flash .sub{font-size:16px;margin-top:8px;opacity:.9}
-#flash.ok{color:#04352F} #flash.no{color:#4A0E20}
+#flash.ok{color:#062B20} #flash.no{color:#4A0E10}
 
 /* ---- footer ---- */
-.foot{background:#1B1740;padding:14px 16px;flex-shrink:0}
+.foot{background:#171A21;padding:14px 16px;flex-shrink:0}
 .stats{display:flex;gap:8px;margin-bottom:12px}
-.st{flex:1;background:#272151;border-radius:14px;padding:11px;text-align:center}
-.st .l{font-size:11px;color:#9C93D8}
-.st .v{font-size:22px;font-weight:700;margin-top:1px}
+.st{flex:1;background:#1F232C;border-radius:14px;padding:11px;text-align:center}
+.st .l{font-size:11px;color:#8B92A0}
+.st .v{font-family:'DM Mono',monospace;font-size:22px;font-weight:500;margin-top:1px;font-variant-numeric:tabular-nums}
 .rate{color:var(--mint)}
 .rate.hot{color:var(--amber)}
 .btn{width:100%;background:var(--violet);color:#fff;font-size:14px;font-weight:700;
   padding:14px;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:8px}
-.btn.g{background:#272151}
+.btn.g{background:#1F232C}
 .recent{max-height:88px;overflow-y:auto;margin-top:12px}
-.r{display:flex;align-items:center;gap:9px;padding:5px 0;font-size:13px;color:#CFC9F0}
+.r{display:flex;align-items:center;gap:9px;padding:5px 0;font-size:13px;color:#B9BEC8}
 .r i{font-size:15px;color:var(--mint)}
-.r .t{margin-left:auto;font-size:11px;color:#7C74B8}
+.r .t{margin-left:auto;font-size:11px;color:#5A6070}
 
 /* ---- setup screen ---- */
-#setup{position:fixed;inset:0;background:#12102B;z-index:9;display:flex;flex-direction:column;
+#setup{position:fixed;inset:0;background:#0D0F14;z-index:9;display:flex;flex-direction:column;
   justify-content:center;padding:26px;gap:14px}
 #setup h1{font-size:22px;font-weight:700}
-#setup p{font-size:13px;color:#9C93D8;line-height:1.7}
-#setup label{font-size:12px;color:#9C93D8;display:block;margin-bottom:7px}
+#setup p{font-size:13px;color:#8B92A0;line-height:1.7}
+#setup label{font-size:12px;color:#8B92A0;display:block;margin-bottom:7px}
 .err{background:var(--pink-soft);color:var(--pink-dk);padding:12px;border-radius:12px;font-size:13px}
 </style>
 </head>
@@ -92,7 +92,7 @@ select{font-family:inherit;font-size:14px;padding:12px;border-radius:12px;border
     <select id="svc" style="background:#fff;color:var(--text)"><option>Loading…</option></select>
   </div>
   <button class="btn" onclick="start()"><i class="ti ti-download"></i>Cache roster and start</button>
-  <div id="cached" style="font-size:12px;color:#9C93D8;text-align:center"></div>
+  <div id="cached" style="font-size:12px;color:#8B92A0;text-align:center"></div>
 </div>
 
 <div class="bar">

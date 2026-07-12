@@ -59,37 +59,47 @@ processing, no transaction fees. Finance module RECORDS and RECONCILES only.
 
 ## Design system
 
-TYPE
-  Headings, figures, brand:  Jost      400 / 500 / 600   (geometric, tabular numerals)
-  Body, labels, UI:          Raleway   400 / 500 / 600 / 700
-  Never mix them up. Numbers are ALWAYS Jost — that is what makes a stat card read.
+TYPE — three faces, each with a job. Never mix them up.
+  DM Sans   headings, buttons, nav, labels, tags        400 / 500 / 600 / 700
+  Karla     body prose                                  400 / 500 / 600 / 700
+  DM Mono   EVERY FIGURE — counts, phone numbers, member codes, balances, IDs
+            400 / 500, font-variant-numeric: tabular-nums
 
-LAYOUT
-- Fixed white sidebar (230px), content on a #F6F6F9 canvas.
+  The mono rule is not decoration. A column of phone numbers or attendance
+  counts must line up digit-under-digit or the table cannot be scanned. If it
+  is a number, it is DM Mono. No exceptions.
+
+LAYOUT — Termii console.
+- Near-black sidebar (#0D0F14, 236px). White cards on a #F7F8FA canvas.
 - Sidebar: brand mark + wordmark, then slab labels (CHURCH / DATA) over nav groups.
-  Active nav = solid brand fill, white text. Tenant identity pinned to the bottom.
-- Page header: 28px Jost title + muted subtitle on the left, actions on the right.
-- KPI row: 4 cards, 3px coloured left border indicating state (brand / warn / bad).
-  Label in caps, big Jost figure, one line of context underneath.
-- Cards: white, 1px #E8E8EF border, 12px radius, header with icon + rule under it.
-- Tables: uppercase micro headers, hairline rows, hover tint. Flagged rows tinted red.
+  ACTIVE nav = #171A21 background + 2px GREEN left border + green icon + white text.
+  Inactive = #8B92A0. Tenant identity pinned to the bottom, above a hairline.
+- Page header: 28px DM Sans title + muted subtitle left, actions right.
+- KPI row: 3px coloured left border stating the KPI's condition —
+  green = fine, amber = someone is waiting, red = something is wrong.
+  Label in caps DM Sans, big DM Mono figure, one line of context.
+- Cards: white, 1px #E8EAEE, 12px radius, header with icon + rule beneath.
+- Tables: uppercase micro headers, hairline rows, brand-wash hover.
+  Flagged rows tinted red.
 
 PALETTE
-  --ink        #16162B   headings
-  --body       #3F3F55   body text
-  --muted      #8A8AA0   secondary
-  --brand      #4338CA   primary, active nav, the leading figure
-  --good       #059669   healthy
-  --warn       #D97706   needs a human soon
-  --bad        #DC2626   needs a human now
-  --canvas     #F6F6F9   --card #FFFFFF   --line #E8E8EF
+  --ink        #12141A   headings
+  --body       #4A4F5C   prose
+  --muted      #8B92A0   secondary
+  --brand      #00C389   THE one green. Buttons, active nav, healthy state.
+  --brand-deep #00674A   text on a green tint
+  --warn       #F5A623   someone is waiting
+  --bad        #E5484D   something is wrong
+  --shell      #0D0F14   sidebar
+  --shell-2    #171A21   active nav
+  --canvas     #F7F8FA   --card #FFFFFF   --line #E8EAEE
 
 RULES
-- Colour states data, never decorates it. Warn = someone is waiting. Bad = something
-  is wrong. If nothing is wrong, the screen is calm and grey.
-- Sentence case in prose. Caps + letter-spacing only on micro-labels and tags.
-- Multi-service is first-class: attendance shows 1st/2nd/3rd as separate tiles with
-  the largest filled brand. Never a single undifferentiated number.
+- One green. Never introduce a second accent.
+- Text on the green button is #062B20, not white — white on #00C389 fails contrast.
+- Colour states data, never decorates it. If nothing is wrong the screen is calm.
+- Multi-service is first-class: 1st/2nd/3rd as separate tiles, the largest filled
+  green. Never a single undifferentiated attendance number.
 - Tenant brand_color may override --brand only.
 
 ## Nigerian market constraints (do not "optimise" these away)
