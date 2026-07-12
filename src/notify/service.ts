@@ -122,12 +122,19 @@ export async function prepare(
 ) {
   const sender = await senderFor(tx);
   const people = await candidates(tx, opts.personIds);
-  const t = await tx.query(`SELECT name FROM tenants WHERE id = current_tenant_id()`);
+  const t = await tx.query(
+    `SELECT name, sms_opt_out_text FROM tenants WHERE id = current_tenant_id()`);
   const church = t.rows[0]?.name ?? "";
+  const optOut = (t.rows[0]?.sms_opt_out_text ?? "Reply STOP to opt out.").trim();
 
   // Normalise BEFORE counting. One curly apostrophe from Word turns a
   // 160-character message into a 70-character one and doubles the bill.
-  const body = toGsm7(opts.body);
+  let body = toGsm7(opts.body);
+
+  // The NCC requires an opt-out instruction at the END of every message.
+  // Appended HERE, at the send layer — an admin must not be able to forget it,
+  // and must not be able to remove it. It is counted, so the cost is honest.
+  if (optOut && !/\bSTOP\b/i.test(body)) body = body.trimEnd() + " " + optOut;
 
   const camp = await tx.query(
     `INSERT INTO campaigns (tenant_id, name, body, template_id, created_by, status)

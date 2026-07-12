@@ -17,7 +17,6 @@ import { registerExportRoutes } from "../export/routes";
 import { registerChurchRoutes } from "../church/routes";
 import { registerReportRoutes } from "../reports/routes";
 import { registerNotifyRoutes } from "../notify/routes";
-import { registerNotifyRoutes } from "../notify/routes";
 import { registerCareRoutes } from "../care/routes";
 
 export function buildServer() {
@@ -96,7 +95,6 @@ export function buildServer() {
   registerExportRoutes(app);
   registerChurchRoutes(app);
   registerReportRoutes(app);
-  registerNotifyRoutes(app);
   registerNotifyRoutes(app);
   registerCareRoutes(app);
 

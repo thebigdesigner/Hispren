@@ -10,10 +10,25 @@ export function registerNotifyRoutes(app: FastifyInstance) {
   const admin = { preHandler: [authenticate, requireRole("admin")] };
 
   /** Live GSM-7 counter for the composer. This is what stops the church overpaying. */
-  app.post<{ Body: { body: string } }>("/api/notify/count", auth, async (req) => {
-    const raw = req.body.body ?? "";
-    return { raw: count(raw), normalised: count(toGsm7(raw)), fixed: toGsm7(raw) };
-  });
+  app.post<{ Body: { body: string } }>("/api/notify/count", auth, async (req) =>
+    tenantTx(req, async (tx) => {
+      const t = await tx.query(
+        `SELECT sms_opt_out_text FROM tenants WHERE id = current_tenant_id()`);
+      const optOut = (t.rows[0]?.sms_opt_out_text ?? "Reply STOP to opt out.").trim();
+
+      const raw = req.body.body ?? "";
+      // Count what will ACTUALLY be sent — including the mandatory opt-out.
+      // Counting without it would understate the cost, which is the same as lying.
+      const withOptOut = (s: string) =>
+        optOut && !/\bSTOP\b/i.test(s) ? s.trimEnd() + " " + optOut : s;
+
+      return {
+        raw: count(withOptOut(raw)),
+        normalised: count(withOptOut(toGsm7(raw))),
+        fixed: toGsm7(raw),
+        opt_out: optOut,
+      };
+    }));
 
   app.get("/api/notify/templates", auth, async (req) =>
     tenantTx(req, async (tx) => (await tx.query(
@@ -97,6 +112,66 @@ export function registerNotifyRoutes(app: FastifyInstance) {
         sms_balance: w.rows[0] ? Number(w.rows[0].balance) : 0,
       };
     }));
+
+  /**
+   * Send ONE message to ONE number, right now. Bypasses the segment, not the
+   * safety layer — consent, DND routing and the counter still apply.
+   *
+   * This is the first thing you do when a sender ID goes live: send to your own
+   * phone and see it arrive. Never test a gateway on a congregation.
+   */
+  app.post<{ Body: { to: string; body: string } }>(
+    "/api/notify/test", admin, async (req, reply) => {
+      const p = provider();
+      const raw = (req.body.to || "").replace(/[^\d+]/g, "");
+      const e164 = raw.startsWith("+") ? raw
+                 : raw.startsWith("234") ? "+" + raw
+                 : raw.startsWith("0") ? "+234" + raw.slice(1)
+                 : "+234" + raw;
+
+      const body = toGsm7(req.body.body || "");
+      const k = count(body);
+
+      return tenantTx(req, async (tx) => {
+        const sender = await n.senderFor(tx);
+        if (!sender.id)
+          return reply.code(400).send({ error: "no_sender_id",
+            detail: "Register a sender ID first. A church sends as DOMINION, not as a number." });
+
+        // Even a test respects the DND reality — otherwise the test lies to you.
+        let route: "generic" | "dnd" = sender.dnd ? "dnd" : "generic";
+        let dnd: boolean | undefined;
+        if (p.checkDnd) {
+          const s = await p.checkDnd(e164);
+          dnd = s.isDnd;
+          if (s.isDnd && !sender.dnd) {
+            return reply.code(400).send({ error: "dnd_no_route",
+              detail: `${e164} is on the DND register. The generic route cannot reach it at all. `
+                    + `Ask your provider to activate the DND route and whitelist ${sender.id}.` });
+          }
+        }
+
+        const r = await p.send(e164, sender.id, body, route);
+
+        const m = await tx.query(
+          `INSERT INTO messages (tenant_id, channel, to_address, sender_id, body, units,
+             encoding, route, status, provider, provider_id, error, sent_at)
+           VALUES (current_tenant_id(),'sms',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now())
+           RETURNING id`,
+          [e164, sender.id, body, k.units, k.encoding, route,
+           r.ok ? "sent" : "failed", p.name, r.providerId ?? null, r.error ?? null]);
+
+        return {
+          ok: r.ok, to: e164, sender_id: sender.id, route,
+          on_dnd_register: dnd,
+          encoding: k.encoding, units: k.units,
+          provider: p.name, provider_id: r.providerId,
+          balance: r.balance,
+          error: r.error,
+          message_id: m.rows[0].id,
+        };
+      });
+    });
 
   /** Inbound STOP webhook. Instant, final, and it writes a consent event. */
   app.post<{ Body: { from?: string; sender?: string; message?: string; sms?: string } }>(

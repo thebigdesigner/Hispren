@@ -2,11 +2,18 @@
  * The Redis half of the event bus. ONLY the worker process imports this.
  * The API never does — which is why the API boots without Redis.
  */
-import { Queue, Worker, JobsOptions } from "bullmq";
-import IORedis from "ioredis";
+import { Queue, Worker, JobsOptions, ConnectionOptions } from "bullmq";
 import { platformQuery } from "./db";
 
-const connection = new IORedis(process.env.REDIS_URL!, { maxRetriesPerRequest: null });
+/**
+ * BullMQ bundles its OWN copy of ioredis. Handing it an instance built from our
+ * ioredis is a type collision and, at runtime, two connection pools where one
+ * was intended. Pass the URL and let BullMQ build its own client.
+ */
+const connection: ConnectionOptions = {
+  url: process.env.REDIS_URL!,
+  maxRetriesPerRequest: null,
+} as ConnectionOptions;
 
 export const eventsQueue = new Queue("events", { connection });
 export const jobsQueue = new Queue("jobs", { connection });

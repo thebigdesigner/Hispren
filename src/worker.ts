@@ -1,57 +1,68 @@
 /**
- * Worker. Needs Redis + bullmq (optionalDependencies).
- * Run it as a SEPARATE Railway service with its own start command:
- *   npx tsx src/worker.ts
- * The API image does not ship these packages.
+ * WORKER.
+ *
+ * A separate process from the API. It needs Redis; the API does not.
+ * On Railway this is a second service with start command:  npx tsx src/worker.ts
+ *
+ * Three jobs:
+ *   1. Relay the transactional outbox into the queue.
+ *   2. Drain the SMS send queue.
+ *   3. Run the reminders — which are cron jobs, not AI.
  */
-/** Worker process: outbox relay + scheduled jobs. Needs Redis. The API does not. */
-import { Worker } from "bullmq";
-import IORedis from "ioredis";
+import { Worker, ConnectionOptions } from "bullmq";
 import { startOutboxRelay, registerSchedules } from "./platform/queue";
 import { runMeteringSnapshot, runRenewals, runDunningSweep } from "./billing/metering";
 import { platformQuery } from "./platform/db";
 import { drainQueue, refreshDnd } from "./notify/service";
 import { runBirthdays, runServiceReminders, runMissedAttendance } from "./notify/reminders";
-import { birthdayReminders, serviceReminders, missedAttendanceReminders, followUpTasks }
-  from "./notify/reminders";
-import { deliver } from "./notify/service";
-import { onEvent } from "./platform/queue";
 
-const connection = new IORedis(process.env.REDIS_URL!, { maxRetriesPerRequest: null });
+const connection: ConnectionOptions = {
+  url: process.env.REDIS_URL!,
+  maxRetriesPerRequest: null,
+} as ConnectionOptions;
 
 startOutboxRelay();
 registerSchedules();
 
 new Worker("jobs", async (job) => {
   switch (job.name) {
-    case "billing.metering.snapshot": return runMeteringSnapshot();
-    case "billing.dunning.sweep":     await runRenewals(); return runDunningSweep();
+    // ---- billing ----
+    case "billing.metering.snapshot":
+      return runMeteringSnapshot();
+    case "billing.dunning.sweep":
+      await runRenewals();
+      return runDunningSweep();
     case "sessions.purge":
       await platformQuery(`DELETE FROM sessions WHERE expires_at < now()`);
       return;
 
+    // ---- notifications ----
     // The send queue. Every 30 seconds.
-    case "notify.drain":            return void await drainQueue(50);
-    // DND status, cached — checking costs an API call per number.
-    case "notify.dnd":              return void await refreshDnd(200);
-    // Cron, not AI. A WHERE clause and a date.
-    case "reminders.birthdays":     return runBirthdays();
-    case "reminders.service":       return runServiceReminders();
-    case "reminders.missed":        return runMissedAttendance(3);
-    case "reminders.birthday":  return birthdayReminders();
-    case "reminders.service":   return serviceReminders();
-    case "reminders.missed":    return missedAttendanceReminders(3);
-    case "reminders.followups": return followUpTasks();
-    default: console.warn("unknown job", job.name);
+    case "notify.drain":
+      await drainQueue(50);
+      return;
+    // Cached DND status. Checking costs an API call per number, so this runs
+    // nightly for numbers we have never checked or have not checked in a month.
+    case "notify.dnd":
+      await refreshDnd(200);
+      return;
+
+    // ---- reminders: cron, not AI ----
+    // A birthday is a WHERE clause and a date. Routing it through an LLM would
+    // mean paying tokens for a database query and introducing hallucination
+    // into a feature that must never fail.
+    case "reminders.birthdays":
+      return runBirthdays();
+    case "reminders.service":
+      return runServiceReminders();
+    case "reminders.missed":
+      // Drafted for the pastor, never auto-sent. A "we missed you" text to
+      // someone whose mother just died is worse than silence.
+      return runMissedAttendance(3);
+
+    default:
+      console.warn("unknown job:", job.name);
   }
 }, { connection });
 
 console.log("hispren worker up");
-
-
-// Deliver queued messages. The API composes and debits; the worker sends.
-onEvent(async (name, data) => {
-  if (name === "message.queued" && data?.entityId) {
-    await deliver(data.entityId).catch((e) => console.error("deliver failed", e.message));
-  }
-});

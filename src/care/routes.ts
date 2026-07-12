@@ -9,15 +9,15 @@ export function registerCareRoutes(app: FastifyInstance) {
   // ---- tasks --------------------------------------------------------------
   app.get<{ Querystring: { status?: string; mine?: string } }>(
     "/api/tasks", auth, async (req) =>
-      tenantTx(req, (tx) => c.listTasks(tx, { ...req.query, userId: req.auth!.userId })));
+      tenantTx(req, (tx) => c.listTasks(tx, { ...(req.query as any), userId: req.auth!.userId })));
 
   app.post<{ Body: any }>("/api/tasks", staff, async (req, reply) => {
-    const t = await tenantTx(req, (tx) => c.createTask(tx, req.body));
+    const t = await tenantTx(req, (tx) => c.createTask(tx, req.body as any));
     reply.code(201).send(t);
   });
 
   app.patch<{ Params: { id: string }; Body: any }>("/api/tasks/:id", staff, async (req, reply) => {
-    const t = await tenantTx(req, (tx) => c.updateTask(tx, req.params.id, req.body));
+    const t = await tenantTx(req, (tx) => c.updateTask(tx, req.params.id, req.body as any));
     return t ?? reply.code(404).send({ error: "not_found" });
   });
 
@@ -30,12 +30,12 @@ export function registerCareRoutes(app: FastifyInstance) {
     tenantTx(req, (tx) => c.listCare(tx, req.query.status)));
 
   app.post<{ Body: any }>("/api/care", staff, async (req, reply) => {
-    const r = await tenantTx(req, (tx) => c.createCare(tx, req.body));
+    const r = await tenantTx(req, (tx) => c.createCare(tx, req.body as any));
     reply.code(201).send(r);
   });
 
   app.patch<{ Params: { id: string }; Body: any }>("/api/care/:id", staff, async (req, reply) => {
-    const r = await tenantTx(req, (tx) => c.updateCare(tx, req.params.id, req.body));
+    const r = await tenantTx(req, (tx) => c.updateCare(tx, req.params.id, req.body as any));
     return r ?? reply.code(404).send({ error: "not_found" });
   });
 

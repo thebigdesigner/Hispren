@@ -91,7 +91,7 @@ export function registerChurchRoutes(app: FastifyInstance) {
   app.post<{ Body: any }>("/api/church/fields", admin, async (req, reply) => {
     try {
       const f = await tenantTx(req, (tx) =>
-        ch.createField(tx, { entity: "person", ...req.body }));
+        ch.createField(tx, { entity: "person", ...(req.body as any) }));
       reply.code(201).send(f);
     } catch (e: any) {
       return reply.code(400).send({ error: "invalid", detail: e.message });

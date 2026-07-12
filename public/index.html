@@ -1879,7 +1879,8 @@ async function viewMessages(){
   window._T = tmpls;
 
   head('Messages', st.live ? `Live via ${st.provider}` : 'Dry run — nothing is actually sent',
-    `<button class="btn" onclick="compose()">Compose</button>`);
+    `<button class="btn btn-o" onclick="testSend()">Send a test</button>
+     <button class="btn" onclick="compose()">Compose</button>`);
 
   $('#view').innerHTML=`
    ${!st.live ? `<div class="card" style="margin-bottom:16px;border-left:3px solid var(--warn)">
@@ -1962,6 +1963,59 @@ async function addSender(){
   go('messages');
 }
 
+/**
+ * Send one message to one number. The first thing you do when a sender ID goes
+ * live — never test a gateway on a congregation.
+ */
+function testSend(){
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal"
+      style="max-width:480px">
+    <div class="h" style="font-size:22px;font-weight:500">Send a test</div>
+    <div class="muted" style="margin-bottom:24px;line-height:1.75">
+      One message, one number — <b style="color:var(--ink)">your own</b>.
+      Never test a gateway on a congregation.</div>
+    <div id="terr"></div>
+    <div class="field"><label>Your number</label>
+      <input id="t_to" placeholder="0803 123 4567" inputmode="tel"></div>
+    <div class="field"><label>Message</label>
+      <textarea id="t_body" rows="3"
+        style="font-family:var(--text);font-size:14px;padding:12px;border:1px solid var(--line);
+               border-radius:8px;width:100%;resize:vertical">Hispren is live. This is a test from your church.</textarea></div>
+    <div style="display:flex;gap:12px;margin-top:24px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
+      <button class="btn" style="flex:2" onclick="doTest()">Send it</button>
+    </div>
+  </div></div>`;
+}
+async function doTest(){
+  const to=$('#t_to').value.trim(), body=$('#t_body').value.trim();
+  if(!to||!body){$('#terr').innerHTML='<div class="err">A number and a message.</div>';return}
+  try{
+    const r=await api('/api/notify/test',{method:'POST',body:JSON.stringify({to,body})});
+    $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal"
+        style="max-width:480px">
+      <div class="h" style="font-size:22px;font-weight:500">
+        ${r.ok?'Sent':'The gateway refused it'}</div>
+      <div class="muted" style="margin-bottom:22px">
+        ${r.ok?'Check your phone. It should arrive in seconds.':'Nothing was delivered.'}</div>
+      <div class="row"><span class="k">To</span><span class="v">${esc(r.to)}</span></div>
+      <div class="row"><span class="k">From</span><span class="v">${esc(r.sender_id)}</span></div>
+      <div class="row"><span class="k">Route</span>
+        <span class="v"><span class="tag ${r.route==='dnd'?'t-g':'t-w'}">${esc(r.route)}</span></span></div>
+      ${r.on_dnd_register!==undefined?`<div class="row"><span class="k">On DND register</span>
+        <span class="v">${r.on_dnd_register?'Yes':'No'}</span></div>`:''}
+      <div class="row"><span class="k">Encoding</span>
+        <span class="v">${esc(r.encoding)} · ${r.units} page${r.units===1?'':'s'}</span></div>
+      <div class="row"><span class="k">Provider</span><span class="v">${esc(r.provider)}</span></div>
+      ${r.balance!==undefined&&r.balance!==null?`<div class="row"><span class="k">Gateway balance</span>
+        <span class="v">${esc(r.balance)}</span></div>`:''}
+      ${r.error?`<div class="err" style="margin-top:16px">${esc(r.error)}</div>`:''}
+      <button class="btn btn-o" style="width:100%;margin-top:24px" onclick="close_();go('messages')">
+        Close</button>
+    </div></div>`;
+  }catch(e){ $('#terr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
+}
+
 function compose(){
   const T = window._T || [];
   $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
@@ -1981,9 +2035,11 @@ function compose(){
         style="font-family:var(--text);font-size:14px;padding:12px;border:1px solid var(--line);
                border-radius:8px;width:100%;resize:vertical"
         placeholder="Hello {{first_name}}, ..."></textarea>
-      <div class="muted" style="margin-top:6px">
+      <div class="muted" style="margin-top:6px;line-height:1.7">
         Merge fields: <b style="color:var(--ink)">{{first_name}}</b>
-        <b style="color:var(--ink)">{{church}}</b></div>
+        <b style="color:var(--ink)">{{church}}</b><br>
+        <b style="color:var(--ink)">Reply STOP to opt out.</b> is added automatically —
+        the NCC requires it, and it is counted below.</div>
     </div>
     <div id="m_count"></div>
     <div style="display:flex;gap:12px;margin-top:24px">
