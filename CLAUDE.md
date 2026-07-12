@@ -115,6 +115,31 @@ RULES
 - Many churches: paper registers + old Excel + WhatsApp groups. Import tooling and
   duplicate merge are core, not nice-to-have.
 
+## Postgres traps that already bit
+
+**NEVER try/catch a failing query inside a transaction and carry on.**
+Postgres ABORTS the entire transaction on the first error. Every query after it
+returns "current transaction is aborted, commands ignored until end of
+transaction block". A catch block that swallows the error does not recover — it
+moves the crash one line down, where nobody is looking for it, and the user sees
+a 500 with no explanation.
+
+    // WRONG — the transaction is already dead by the time we get here
+    try { await tx.query(`UPDATE wallet ...`); }
+    catch { balance = null; }
+    await tx.query(`UPDATE messages ...`);   // <- "transaction is aborted"
+
+    // RIGHT — check first, then act
+    const w = await tx.query(`SELECT balance FROM wallet ...`);
+    if (!w.rows[0]) throw new Error("no wallet");
+    await tx.query(`UPDATE wallet ...`);
+
+If you genuinely need to recover mid-transaction, use a SAVEPOINT. Usually you
+do not — a SELECT first is clearer and cheaper.
+
+**Reserved words that are NOT obviously reserved:** `rollup`, `position`.
+Both were used as identifiers and both were syntax errors.
+
 ## Testing rules
 
 - Two-tenant adversarial suite runs on every commit: every endpoint hit from

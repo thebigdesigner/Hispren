@@ -2074,8 +2074,8 @@ async function viewMessages(){
            ${c.by_who?' · '+esc(c.by_who):''}</div></td>
        <td class="num" style="color:var(--ink)">${c.queued}</td>
        <td class="num" style="color:${c.suppressed?'var(--warn)':'var(--muted)'}">${c.suppressed}</td>
-       <td class="num muted">${c.units}</td>
-       <td class="num muted">${Number(c.cost).toLocaleString()}</td>
+       <td class="num muted">${c.units||0}</td>
+       <td class="num muted">${Number(c.cost||0).toLocaleString()}</td>
        <td><span class="tag ${c.status==='sent'||c.status==='queued'?'t-g':
          c.status==='failed'?'t-r':'t-n'}">${esc(c.status)}</span></td>
      </tr>`).join('')}</tbody></table>`
@@ -2350,8 +2350,14 @@ function showPrepare(){
     <div style="background:var(--brand-wash);border:1px solid var(--brand-soft);border-radius:9px;
          padding:16px;font-size:14px;line-height:1.7;white-space:pre-wrap">${esc(p.sample)}</div>
     <div class="muted" style="margin-top:8px">
-      From <b style="color:var(--ink)">${esc(p.sender_id||'no sender ID')}</b> ·
-      ${p.counted.encoding} · ${p.counted.units} page${p.counted.units===1?'':'s'}</div>
+      ${p.by_email && !p.by_sms
+        ? `Sent as an <b style="color:var(--ink)">email</b>. No character limit, no cost.`
+        : p.sender_id
+          ? `From <b style="color:var(--ink)">${esc(p.sender_id)}</b> ·
+             ${p.counted.encoding} · ${p.counted.units} page${p.counted.units===1?'':'s'}`
+          : `<b style="color:var(--bad)">No sender ID.</b> SMS cannot be sent without one —
+             register it under Messages. The email half will still go out.`}
+    </div>
 
     ${p.suppressed?`<div class="sect">Who this will NOT reach, and why</div>
       ${Object.entries(p.reasons).map(([k,n])=>{
@@ -2371,19 +2377,48 @@ function showPrepare(){
       <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
       <button class="btn" style="flex:2" onclick="doSend()"
         ${p.queued?'':'disabled style="flex:2;opacity:.4"'}>
-        ${p.queued?`Send to ${p.queued}`:'Nobody to send to'}</button>
+        ${!p.queued ? 'Nobody to send to'
+          : cost === 0 ? `Send to ${p.queued} — free`
+          : `Send to ${p.queued} — NGN ${cost.toLocaleString()}`}</button>
     </div>
   </div></div>`;
 }
 
 async function doSend(){
+  const btn = document.querySelector('.modal .btn:last-child');
+  if(btn){ btn.disabled=true; btn.textContent='Sending…'; btn.style.opacity='.6'; }
   try{
     const r=await api('/api/notify/send/'+PREP.campaign_id,{method:'POST'});
-    close_();
-    alert(`Queued ${r.queued} message${r.queued===1?'':'s'} · ${r.units} pages · NGN ${r.cost}\n`
-      +`SMS credit remaining: ${r.balance}`);
-    go('messages');
-  }catch(e){ alert(e.message) }
+    $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()">
+      <div class="modal" style="max-width:440px;text-align:center">
+        <div style="width:56px;height:56px;border-radius:50%;background:var(--brand-soft);
+          display:flex;align-items:center;justify-content:center;margin:0 auto 18px">
+          <i class="ti ti-check" style="font-size:30px;color:var(--brand-dk)"></i></div>
+        <div class="h" style="font-size:21px;font-weight:600">Queued</div>
+        <div class="muted" style="margin:8px 0 22px;line-height:1.75">
+          ${r.queued} message${r.queued===1?'':'s'} on the way.
+          ${r.free
+            ? 'It cost nothing — every one of them went by email.'
+            : `NGN ${Number(r.cost).toLocaleString()} · ${r.units} SMS page${r.units===1?'':'s'} ·
+               ${Number(r.balance).toLocaleString()} credit left.`}
+        </div>
+        <button class="btn" style="width:100%" onclick="close_();go('messages')">Done</button>
+      </div></div>`;
+  }catch(e){
+    // Show the failure IN the modal. An alert() box loses the context of what
+    // the pastor was about to do, and tells him nothing about how to fix it.
+    const box = document.querySelector('.modal');
+    if(box){
+      const err=document.createElement('div');
+      err.className='err';
+      err.style.marginTop='16px';
+      err.textContent=e.message;
+      box.appendChild(err);
+      err.scrollIntoView({behavior:'smooth',block:'nearest'});
+    }
+    if(btn){ btn.disabled=false; btn.style.opacity='1';
+             btn.textContent=`Send to ${PREP.queued}`; }
+  }
 }
 
 async function openCampaign(id,name){
@@ -2403,7 +2438,8 @@ async function openCampaign(id,name){
       <td class="muted" style="font-size:12px">${
         m.suppressed_by ? esc((SUPPRESS_REASON[m.suppressed_by]||[m.suppressed_by])[0])
         : m.error ? esc(m.error)
-        : m.route ? esc(m.route)+' route' : '—'}</td>
+        : m.channel === 'email' ? 'free'
+        : m.route ? esc(m.route)+' route · '+(m.units||1)+' page'+((m.units||1)===1?'':'s') : '—'}</td>
     </tr>`).join('')}</tbody></table>
     <button class="btn btn-o" style="width:100%;margin-top:24px" onclick="close_()">Close</button>
   </div></div>`;

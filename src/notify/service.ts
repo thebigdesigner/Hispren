@@ -271,43 +271,84 @@ export async function prepare(
 }
 
 /** Charge the wallet, then hand the queue to the worker. */
+/**
+ * Send. Charges the SMS wallet, then hands the queue to the worker.
+ *
+ * TWO TRAPS BURIED HERE, both of which bit:
+ *
+ * 1. NEVER try/catch a failing query inside a transaction and carry on.
+ *    Postgres ABORTS the whole transaction on the first error — every query
+ *    after it returns "current transaction is aborted". A catch block that
+ *    swallows the error just moves the crash one line down, where nobody is
+ *    looking for it. So: CHECK first with a SELECT, then act.
+ *
+ * 2. An all-email campaign costs ZERO SMS pages. Do not touch the wallet at
+ *    all. Charging a church nothing is not the same as charging it zero.
+ */
 export async function dispatch(tx: Tx, campaignId: string, unitPrice = 4.5) {
   const c = await tx.query(
-    `SELECT queued, units, status FROM campaigns WHERE id = $1`, [campaignId]);
-  if (!c.rows[0]) throw new Error("campaign not found");
-  if (c.rows[0].status !== "draft") throw new Error("this campaign has already been sent");
+    `SELECT queued, units, status, channel FROM campaigns WHERE id = $1`, [campaignId]);
+  if (!c.rows[0]) throw new Error("That campaign no longer exists.");
+  if (c.rows[0].status !== "draft")
+    throw new Error("This campaign has already been sent.");
+  if (!Number(c.rows[0].queued))
+    throw new Error("There is nobody to send this to.");
 
-  const cost = Number(c.rows[0].units) * unitPrice;
+  const units = Number(c.rows[0].units) || 0;
+  const cost = units * unitPrice;
 
-  // A church must never go into SMS debt. The wallet's CHECK (balance >= 0)
-  // refuses at the database level, so this fails loudly instead of quietly.
   let balance: number | null = null;
-  try {
+
+  // ---- SMS costs money. Email does not. --------------------------------
+  if (cost > 0) {
+    // CHECK, do not try/catch. A failed UPDATE would abort the transaction
+    // and every query after it — including the ones that record the failure.
     const w = await tx.query(
+      `SELECT balance FROM credit_wallets
+        WHERE tenant_id = current_tenant_id() AND credit_type = 'sms'`);
+
+    if (!w.rows[0]) {
+      throw new Error(
+        `This church has no SMS wallet yet. It needs ${units} SMS page` +
+        `${units === 1 ? "" : "s"} (NGN ${cost.toFixed(2)}). ` +
+        `Top it up, or send by email instead — email costs nothing.`);
+    }
+
+    const have = Number(w.rows[0].balance);
+    if (have < cost) {
+      throw new Error(
+        `Not enough SMS credit. This needs ${units} page${units === 1 ? "" : "s"} ` +
+        `(NGN ${cost.toFixed(2)}) and there ${have === 1 ? "is" : "are"} only ${have} left. ` +
+        `Top up, or send by email — email costs nothing.`);
+    }
+
+    const upd = await tx.query(
       `UPDATE credit_wallets SET balance = balance - $1, updated_at = now()
         WHERE tenant_id = current_tenant_id() AND credit_type = 'sms'
         RETURNING balance`, [cost]);
-    balance = w.rows[0] ? Number(w.rows[0].balance) : null;
-  } catch { balance = null; }
+    balance = Number(upd.rows[0].balance);
 
-  if (balance === null) {
     await tx.query(
-      `UPDATE messages SET status='suppressed', suppressed_by='no_credit'
-        WHERE campaign_id=$1 AND status='queued'`, [campaignId]);
-    await tx.query(`UPDATE campaigns SET status='failed' WHERE id=$1`, [campaignId]);
-    throw new Error(`Not enough SMS credit. This campaign needs ${cost.toFixed(2)} units.`);
+      `INSERT INTO credit_ledger (tenant_id, credit_type, delta, reason)
+       VALUES (current_tenant_id(), 'sms', $1, $2)`,
+      [-cost, `campaign:${campaignId}`]);
   }
 
   await tx.query(
-    `INSERT INTO credit_ledger (tenant_id, credit_type, delta, reason)
-     VALUES (current_tenant_id(), 'sms', $1, $2)`, [-cost, `campaign:${campaignId}`]);
-  await tx.query(
     `UPDATE campaigns SET status='queued', cost=$2, sent_at=now() WHERE id=$1`,
     [campaignId, cost]);
-  await publish(tx, { type: "campaign.queued", entityType: "campaign",
-    entityId: campaignId, payload: { units: c.rows[0].units, cost } });
 
-  return { queued: c.rows[0].queued, units: c.rows[0].units, cost, balance };
+  await publish(tx, {
+    type: "campaign.queued", entityType: "campaign", entityId: campaignId,
+    payload: { units, cost },
+  });
+
+  return {
+    queued: Number(c.rows[0].queued),
+    units, cost,
+    balance,                       // null when nothing was charged
+    free: cost === 0,
+  };
 }
 
 // ---------------------------------------------------------------------------
