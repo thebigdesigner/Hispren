@@ -59,46 +59,38 @@ processing, no transaction fees. Finance module RECORDS and RECONCILES only.
 
 ## Design system
 
-LAYOUT — Prodify reference. Soft, warm, human. Not a banking dashboard.
-- Page canvas #FAFAFC. Cards are white with a 1px #F0F0F5 border and 16px radius.
-  NO heavy shadows. Airy, generous whitespace.
-- Sidebar (196px): user profile card at the TOP (avatar + name + "Online" in mint).
-  Nav items are icon + label, 11px radius. ACTIVE = pale violet pill (#EDE9FE) with
-  violet text. Below the nav, a "My church" section with colour-dotted group rows.
-  A violet promo card sits at the bottom.
-- Greeting is two lines: "Hello there" in dark, then a question in a
-  mint-to-violet GRADIENT ("How is the church doing today?"). This is the signature.
-- Action pills under the greeting: first one violet-filled with a sparkle icon
-  ("Ask Hispren"), the rest white with a hairline border.
-- Card headers: violet icon + 13px semibold title.
-- Progress bars: 6px, fully rounded, on a #F1F1F6 track.
-- Status pills: 8px radius, tinted background + matching dark text, 500 weight.
-- Everything is ROUNDED and SOFT. No hard edges, no dark chrome.
+TYPE
+  Headings, figures, brand:  Jost      400 / 500 / 600   (geometric, tabular numerals)
+  Body, labels, UI:          Raleway   400 / 500 / 600 / 700
+  Never mix them up. Numbers are ALWAYS Jost — that is what makes a stat card read.
 
-PALETTE (Prodify)
-  --violet      #6D4AFF   primary: buttons, active nav, headline emphasis
-  --violet-dk   #5B3FD9   text on pale violet
-  --violet-soft #EDE9FE   active nav pill, tints
-  --violet-wash #F7F5FF   hover states, inner tiles
-  --mint        #2DD4BF   positive/live: online dot, gradient start, good progress
-  --mint-dk     #0F766E   text on mint tint
-  --coral       #FB7185   urgent: duplicates, overdue, at-risk
-  --coral-dk    #BE3455   text on coral tint
-  --amber       #FB923C   warning: incomplete data
-  --page        #FAFAFC
-  --card        #FFFFFF   --line #F0F0F5   --line2 #F5F5F9
-  --text        #1F2033   --muted #9195A8
-  --chip        #F1F1F6 (+ text #6B7080)
+LAYOUT
+- Fixed white sidebar (230px), content on a #F6F6F9 canvas.
+- Sidebar: brand mark + wordmark, then slab labels (CHURCH / DATA) over nav groups.
+  Active nav = solid brand fill, white text. Tenant identity pinned to the bottom.
+- Page header: 28px Jost title + muted subtitle on the left, actions on the right.
+- KPI row: 4 cards, 3px coloured left border indicating state (brand / warn / bad).
+  Label in caps, big Jost figure, one line of context underneath.
+- Cards: white, 1px #E8E8EF border, 12px radius, header with icon + rule under it.
+- Tables: uppercase micro headers, hairline rows, hover tint. Flagged rows tinted red.
+
+PALETTE
+  --ink        #16162B   headings
+  --body       #3F3F55   body text
+  --muted      #8A8AA0   secondary
+  --brand      #4338CA   primary, active nav, the leading figure
+  --good       #059669   healthy
+  --warn       #D97706   needs a human soon
+  --bad        #DC2626   needs a human now
+  --canvas     #F6F6F9   --card #FFFFFF   --line #E8E8EF
 
 RULES
-- Violet is the product. Mint is life and progress. Coral is what needs a human.
-  Amber is data that is merely incomplete. Never decorative.
-- The gradient headline (mint to violet) appears once per screen, in the greeting.
-- Font: Plus Jakarta Sans. Weights 400/500/600 only.
-- Sentence case everywhere.
-- Tenant brand_color may override --violet only.
-- Multi-service is first-class: attendance shows 1st/2nd/3rd as separate tiles,
-  the largest one filled violet. Never a single undifferentiated number.
+- Colour states data, never decorates it. Warn = someone is waiting. Bad = something
+  is wrong. If nothing is wrong, the screen is calm and grey.
+- Sentence case in prose. Caps + letter-spacing only on micro-labels and tags.
+- Multi-service is first-class: attendance shows 1st/2nd/3rd as separate tiles with
+  the largest filled brand. Never a single undifferentiated number.
+- Tenant brand_color may override --brand only.
 
 ## Nigerian market constraints (do not "optimise" these away)
 

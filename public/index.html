@@ -6,237 +6,194 @@
 <title>Hispren</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600&family=Raleway:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.2.0/dist/tabler-icons.min.css" rel="stylesheet">
 <style>
 :root{
-  --violet:#6D4AFF; --violet-dk:#5B3FD9; --violet-soft:#EDEBFF; --violet-wash:#F7F6FF;
-  --mint:#2DD4BF; --mint-dk:#0F766E; --mint-soft:#EAFBF8;
-  --blue:#5B8DEF; --blue-soft:#EAF1FE;
-  --pink:#FF6B8A; --pink-dk:#C42F52; --pink-soft:#FFE8EC;
-  --amber:#FB923C; --amber-soft:#FFF1E6;
-  --shell:#FFFFFF; --line:#EFEFF4; --line2:#F6F6FA;
-  --text:#1F2033; --muted:#9A9EB0; --chip:#F3F3F7; --chip-tx:#767B8C;
+  --ink:#16162B; --body:#3F3F55; --muted:#8A8AA0; --faint:#B4B4C6;
+  --brand:#4338CA; --brand-dk:#3730A3; --brand-soft:#EEEDFB; --brand-wash:#F7F6FE;
+  --good:#059669; --good-soft:#E7F6F1;
+  --warn:#D97706; --warn-soft:#FDF3E4;
+  --bad:#DC2626;  --bad-soft:#FBEAEA;
+  --canvas:#F6F6F9; --card:#FFFFFF; --line:#E8E8EF; --line2:#F1F1F5;
+  --head:'Jost',system-ui,sans-serif;
+  --text:'Raleway',system-ui,sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:14px;color:var(--text);
-  -webkit-font-smoothing:antialiased;min-height:100vh;
-  background:linear-gradient(150deg,#C9BDFB 0%,#B9A9F7 40%,#A896F2 100%);
-  background-attachment:fixed;padding:22px}
-button{font-family:inherit;cursor:pointer;border:none;background:none}
-input,select{font-family:inherit;font-size:13px;padding:10px 12px;border:1px solid var(--line);
-  border-radius:10px;width:100%;background:#fff;color:var(--text)}
-input:focus,select:focus{outline:none;border-color:var(--violet);box-shadow:0 0 0 3px var(--violet-soft)}
-label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
-.field{margin-bottom:14px}
-.muted{color:var(--muted);font-size:12px}
-.grad{background:linear-gradient(90deg,#2DD4BF 0%,#38BDF8 55%,#6D4AFF 100%);
-  -webkit-background-clip:text;background-clip:text;color:transparent}
+body{font-family:var(--text);background:var(--canvas);color:var(--body);
+  font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+h1,h2,h3,.h,.num{font-family:var(--head);color:var(--ink);letter-spacing:-.01em}
+button{font-family:var(--text);cursor:pointer;border:none;background:none}
+input,select{font-family:var(--text);font-size:14px;padding:10px 12px;border:1px solid var(--line);
+  border-radius:8px;width:100%;background:#fff;color:var(--ink)}
+input:focus,select:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;
+  text-transform:uppercase;letter-spacing:.05em}
+.field{margin-bottom:16px}
+.muted{color:var(--muted);font-size:13px}
+.num{font-weight:600;font-variant-numeric:tabular-nums}
 
-.btn{background:var(--violet);color:#fff;font-size:13px;font-weight:600;padding:10px 18px;border-radius:12px}
-.btn:hover{background:var(--violet-dk)}
-.btn-o{background:#fff;color:var(--text);border:1px solid var(--line);font-weight:500}
-.btn-o:hover{background:var(--violet-wash);border-color:var(--violet-soft)}
-.pill{font-size:11px;padding:4px 10px;border-radius:7px;display:inline-block;white-space:nowrap;font-weight:600;letter-spacing:.03em}
-.p-v{background:var(--violet-soft);color:var(--violet-dk)}
-.p-m{background:var(--mint-soft);color:var(--mint-dk)}
-.p-p{background:var(--pink-soft);color:var(--pink-dk)}
-.p-g{background:var(--chip);color:var(--chip-tx)}
-.err{background:var(--pink-soft);color:var(--pink-dk);padding:10px 13px;border-radius:10px;font-size:12px;margin-bottom:14px}
-.av{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;flex-shrink:0;
-  width:32px;height:32px;font-size:11px;background:var(--violet-soft);color:var(--violet-dk)}
-.mark{width:38px;height:38px;border-radius:12px;background:var(--violet);color:#fff;
-  display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700}
+.btn{font-family:var(--text);background:var(--brand);color:#fff;font-size:14px;font-weight:600;
+  padding:10px 20px;border-radius:8px;transition:background .15s}
+.btn:hover{background:var(--brand-dk)}
+.btn-o{background:#fff;color:var(--ink);border:1px solid var(--line);font-weight:600}
+.btn-o:hover{background:var(--brand-wash);border-color:var(--brand-soft)}
+.tag{font-size:11px;font-weight:700;padding:4px 9px;border-radius:5px;display:inline-block;
+  white-space:nowrap;text-transform:uppercase;letter-spacing:.05em}
+.t-b{background:var(--brand-soft);color:var(--brand-dk)}
+.t-g{background:var(--good-soft);color:var(--good)}
+.t-w{background:var(--warn-soft);color:var(--warn)}
+.t-r{background:var(--bad-soft);color:var(--bad)}
+.t-n{background:var(--line2);color:var(--muted)}
+.err{background:var(--bad-soft);color:var(--bad);padding:11px 14px;border-radius:8px;
+  font-size:13px;margin-bottom:16px}
 
-#login{min-height:calc(100vh - 44px);display:flex;align-items:center;justify-content:center}
-#login .box{background:#fff;border-radius:26px;padding:38px;width:100%;max-width:404px;
-  box-shadow:0 24px 60px rgba(60,40,140,.18)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px}
+.ch{display:flex;align-items:center;gap:9px;padding-bottom:14px;margin-bottom:16px;
+  border-bottom:1px solid var(--line2)}
+.ch i{font-size:17px;color:var(--brand)}
+.ch h3{font-size:16px;font-weight:500}
+.ch .r{margin-left:auto;font-size:13px;color:var(--muted);font-family:var(--text)}
+.av{border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  width:34px;height:34px;font-size:12px;font-weight:700;font-family:var(--head);
+  background:var(--brand-soft);color:var(--brand-dk)}
 
-/* ---------- shell ---------- */
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+#login .box{background:#fff;border:1px solid var(--line);border-radius:14px;padding:40px;
+  width:100%;max-width:400px}
+.mark{width:40px;height:40px;border-radius:9px;background:var(--brand);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-family:var(--head);
+  font-size:21px;font-weight:600}
+
 #app{display:none}
-.shell{background:var(--shell);border-radius:22px;display:flex;overflow:hidden;
-  max-width:1200px;margin:0 auto;min-height:calc(100vh - 44px);
-  box-shadow:0 28px 70px rgba(60,40,140,.22)}
+.wrap{display:flex;min-height:100vh}
+.side{width:230px;flex-shrink:0;background:#fff;border-right:1px solid var(--line);
+  padding:22px 16px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:11px;padding:0 6px 24px}
+.brand .t{font-family:var(--head);font-size:19px;font-weight:600;color:var(--ink)}
+.slab{font-size:11px;font-weight:700;color:var(--faint);letter-spacing:.09em;
+  text-transform:uppercase;padding:18px 10px 8px}
+.nav{display:flex;align-items:center;gap:11px;padding:10px;border-radius:7px;
+  color:var(--body);font-size:14px;font-weight:500;cursor:pointer;margin-bottom:1px}
+.nav i{font-size:18px;color:var(--muted)}
+.nav:hover{background:var(--brand-wash)}
+.nav.on{background:var(--brand);color:#fff;font-weight:600}
+.nav.on i{color:#fff}
+.nav .n{margin-left:auto;font-family:var(--head);font-size:11px;font-weight:600;
+  background:var(--bad);color:#fff;padding:1px 7px;border-radius:9px}
+.nav.on .n{background:rgba(255,255,255,.25)}
+.who{margin-top:auto;padding:14px 10px 0;border-top:1px solid var(--line2);
+  display:flex;align-items:center;gap:10px}
 
-.side{width:206px;flex-shrink:0;padding:18px 14px;border-right:1px solid var(--line);
-  display:flex;flex-direction:column}
-.prof{display:flex;align-items:center;gap:9px;padding:8px;border-radius:12px;margin-bottom:16px;cursor:pointer}
-.prof:hover{background:var(--violet-wash)}
-.nav{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:10px;
-  color:var(--muted);font-size:13px;cursor:pointer;margin-bottom:1px;font-weight:500}
-.nav i{font-size:17px}
-.nav:hover{background:var(--violet-wash);color:var(--text)}
-.nav.on{background:var(--violet-soft);color:var(--text);font-weight:600}
-.nav.on i{color:var(--violet)}
-.n{margin-left:auto;font-size:10px;background:var(--pink);color:#fff;
-  padding:1px 6px;border-radius:7px;font-weight:700}
-.sec{display:flex;align-items:center;justify-content:space-between;padding:20px 11px 8px}
-.sec>span{font-size:12px;color:var(--muted);font-weight:500}
-.add{font-size:12px;color:var(--violet);background:var(--violet-soft);
-  padding:2px 8px;border-radius:7px;font-weight:600}
-.dotrow{display:flex;align-items:center;gap:10px;padding:7px 11px;font-size:13px;cursor:pointer;border-radius:9px}
-.dotrow:hover{background:var(--violet-wash)}
-.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.promo{background:linear-gradient(140deg,#7C6BFF,#6D4AFF);border-radius:16px;padding:14px;margin-top:auto}
+.main{flex:1;min-width:0;padding:28px 34px}
+.top{display:flex;justify-content:space-between;align-items:flex-end;
+  margin-bottom:26px;gap:16px;flex-wrap:wrap}
+.top h1{font-size:28px;font-weight:500;line-height:1.2}
+.top .sub{font-size:14px;color:var(--muted);margin-top:3px}
 
-/* ---------- main ---------- */
-.main{flex:1;min-width:0;padding:22px 26px;overflow-x:hidden}
-.hi{font-size:26px;font-weight:700;line-height:1.28;letter-spacing:-.01em}
-.acts{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 20px}
-.act{border:1px solid var(--line);background:#fff;color:var(--text);font-size:12px;font-weight:600;
-  padding:9px 16px;border-radius:22px;display:flex;align-items:center;gap:6px}
-.act:hover{background:var(--violet-wash);border-color:var(--violet-soft)}
-.act.v{background:var(--violet);color:#fff;border-color:var(--violet)}
-.act.v:hover{background:var(--violet-dk)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+.kpi .l{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.kpi .v{font-family:var(--head);font-size:30px;font-weight:500;color:var(--ink);
+  line-height:1.15;margin-top:6px;font-variant-numeric:tabular-nums}
+.kpi .d{font-size:12px;margin-top:3px}
+.kpi.acc{border-left:3px solid var(--brand)}
+.kpi.bad{border-left:3px solid var(--bad)}
+.kpi.warn{border-left:3px solid var(--warn)}
 
-.g2{display:grid;grid-template-columns:minmax(0,1.06fr) minmax(0,1fr);gap:16px}
+.g2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
 .col{display:flex;flex-direction:column;gap:16px}
-.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px 18px;
-  box-shadow:0 2px 10px rgba(60,40,140,.04)}
-.ch{display:flex;align-items:center;gap:8px;margin-bottom:14px}
-.ch i{font-size:16px;color:var(--violet)}
-.ch b{font-size:13px;font-weight:700}
-.ch .r{margin-left:auto;display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
-.ch .r i{font-size:15px;color:var(--muted);cursor:pointer}
-
-.grouphdr{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-.thead{display:grid;grid-template-columns:1fr 74px 84px;padding:0 0 7px;
-  font-size:11px;color:var(--muted);font-weight:500}
-.trow{display:grid;grid-template-columns:1fr 74px 84px;align-items:center;
-  padding:9px 0;border-top:1px solid var(--line2);cursor:pointer}
-.trow:hover{background:var(--violet-wash)}
-.tname{display:flex;align-items:center;gap:8px;min-width:0}
-.tname i{font-size:14px;color:var(--muted)}
-.addrow{display:flex;align-items:center;gap:7px;padding:9px 0;color:var(--muted);
-  font-size:12px;font-weight:500;cursor:pointer}
-.addrow:hover{color:var(--violet)}
-
-.goal{margin-bottom:15px}
-.goal:last-child{margin-bottom:0}
-.bar{height:6px;background:var(--chip);border-radius:4px;overflow:hidden;flex:1}
-.bar>div{height:6px;border-radius:4px}
-
-.gtiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.gt{display:flex;align-items:center;gap:10px;padding:10px;border-radius:13px;cursor:pointer}
-.gt:hover{background:var(--violet-wash)}
-.gt.new{border:1px dashed var(--line);color:var(--muted)}
-.gt.new:hover{border-color:var(--violet);color:var(--violet)}
-.gicon{width:32px;height:32px;border-radius:10px;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center}
-.gicon i{font-size:16px;color:#fff}
-
-.days{display:flex;align-items:center;gap:3px;margin-bottom:13px}
-.day{flex:1;text-align:center;padding:6px 0;border-radius:11px;cursor:pointer}
-.day:hover{background:var(--violet-wash)}
-.day .w{font-size:11px;color:var(--muted)}
-.day .d{font-size:13px;font-weight:600;margin-top:2px}
-.day.on{background:var(--violet)}
-.day.on .w{color:#CFC4FF} .day.on .d{color:#fff}
-.event{background:var(--violet-wash);border-radius:14px;padding:12px}
-.stack{display:flex;align-items:center}
-.stack .av{width:24px;height:24px;font-size:10px;border:2px solid #fff;margin-left:-7px}
-.stack .av:first-child{margin-left:0}
-
-.rem{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-top:1px solid var(--line2)}
-.rem:first-of-type{border-top:none}
-.rem .t{flex:1;font-size:12px;line-height:1.55;min-width:0}
-.rem i{font-size:15px;color:var(--muted);cursor:pointer}
-.rem i:hover{color:var(--violet)}
-
-.fab{position:fixed;right:34px;bottom:34px;width:52px;height:52px;border-radius:50%;
-  background:linear-gradient(140deg,#FF6B8A,#8B5CF6);color:#fff;display:flex;
-  align-items:center;justify-content:center;box-shadow:0 10px 26px rgba(139,92,246,.42);z-index:8}
-.fab i{font-size:22px}
-.fab:hover{transform:scale(1.05)}
+.bar{height:7px;background:var(--line2);border-radius:4px;overflow:hidden;flex:1}
+.bar>div{height:7px;border-radius:4px}
+.meter{margin-bottom:18px}
+.meter:last-child{margin-bottom:0}
 
 table{width:100%;border-collapse:collapse}
-th{font-size:11px;color:var(--muted);font-weight:500;text-align:left;padding:0 12px 9px}
-td{padding:11px 12px;border-top:1px solid var(--line2);font-size:13px;vertical-align:middle}
-tbody tr{cursor:pointer} tbody tr:hover{background:var(--violet-wash)}
-tr.dupe{background:var(--pink-soft)}
+th{font-size:11px;font-weight:700;color:var(--muted);text-align:left;padding:0 14px 11px;
+  text-transform:uppercase;letter-spacing:.06em}
+td{padding:13px 14px;border-top:1px solid var(--line2);font-size:14px;vertical-align:middle}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--brand-wash)}
+tr.flag{background:var(--bad-soft)}
+tr.flag:hover{background:#F7DFDF}
 
-.mbg{position:fixed;inset:0;background:rgba(43,31,90,.42);backdrop-filter:blur(4px);
-  display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;z-index:9}
-.modal{background:#fff;border-radius:24px;padding:26px;width:100%;max-width:660px;
-  box-shadow:0 30px 80px rgba(43,31,90,.3)}
-.sect{font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.04em;margin:20px 0 12px;
-  padding-bottom:7px;border-bottom:1px solid var(--line)}
+.li{display:flex;align-items:center;gap:12px;padding:13px 0;border-top:1px solid var(--line2)}
+.li:first-of-type{border-top:none}
+.li .g{width:34px;height:34px;border-radius:7px;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0}
+.li .g i{font-size:17px;color:#fff}
+
+.svc{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:10px}
+.sv{border:1px solid var(--line);border-radius:10px;padding:14px 10px;text-align:center}
+.sv.on{background:var(--brand);border-color:var(--brand)}
+.sv .l{font-size:12px;font-weight:600;color:var(--muted)}
+.sv .v{font-family:var(--head);font-size:26px;font-weight:500;color:var(--ink);
+  font-variant-numeric:tabular-nums;line-height:1.2}
+.sv.on .l{color:#C7C3F5} .sv.on .v{color:#fff}
+
+.note{background:var(--brand-wash);border:1px solid var(--brand-soft);border-radius:10px;
+  padding:18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+
+.mbg{position:fixed;inset:0;background:rgba(22,22,43,.45);display:flex;align-items:flex-start;
+  justify-content:center;padding:40px 16px;overflow-y:auto;z-index:9}
+.modal{background:#fff;border-radius:14px;padding:30px;width:100%;max-width:680px}
+.sect{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;
+  margin:26px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
 .sect:first-of-type{margin-top:0}
-.row{display:flex;justify-content:space-between;padding:8px 0;font-size:13px}
-.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
-.gg2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media(max-width:900px){.shell{flex-direction:column}.side{width:100%;border-right:none;border-bottom:1px solid var(--line)}
-  .g2,.g3,.gg2,.gtiles{grid-template-columns:1fr}.promo{margin-top:16px}}
+.row{display:flex;justify-content:space-between;gap:16px;padding:9px 0;font-size:14px}
+.row .k{color:var(--muted)}
+.row .v{color:var(--ink);font-weight:500;text-align:right}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.gg2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:900px){.wrap{flex-direction:column}.side{width:100%;height:auto;position:static}
+  .main{padding:20px}.g2,.g3,.gg2{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 
 <div id="login">
   <div class="box">
-    <div style="display:flex;align-items:center;gap:11px">
-      <div class="mark">H</div><div style="font-size:19px;font-weight:700">Hispren</div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:28px">
+      <div class="mark">H</div>
+      <div><div class="h" style="font-size:20px;font-weight:600">Hispren</div>
+        <div class="muted" style="font-size:12px">Church OS</div></div>
     </div>
-    <div class="hi" style="font-size:21px;margin:22px 0 2px">Welcome back</div>
-    <div class="hi grad" style="font-size:21px;margin-bottom:26px">Let's look after your church.</div>
     <div id="lerr"></div>
     <div class="field"><label>Church</label><input id="church" value="dominion" autocomplete="off"></div>
     <div class="field"><label>Email</label><input id="email" type="email" value="pastor@dominion.test" autocomplete="username"></div>
     <div class="field"><label>Password</label><input id="pw" type="password" value="DominionPastor2026" autocomplete="current-password"></div>
-    <button class="btn" style="width:100%;margin-top:6px" onclick="doLogin()">Sign in</button>
+    <button class="btn" style="width:100%;margin-top:8px" onclick="doLogin()">Sign in</button>
   </div>
 </div>
 
-<div id="app"><div class="shell">
+<div id="app"><div class="wrap">
   <div class="side">
-    <div class="prof">
-      <div class="av" id="pAv">—</div>
-      <div style="min-width:0;flex:1">
-        <div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="pName">—</div>
-        <div style="font-size:11px;color:var(--mint);font-weight:600">Online</div>
-      </div>
-      <i class="ti ti-chevron-down" style="font-size:14px;color:var(--muted)"></i>
-    </div>
-
-    <div class="nav on" data-v="home"       onclick="go('home')"><i class="ti ti-home"></i>Home</div>
-    <div class="nav"    data-v="ai"         onclick="askAI()"><i class="ti ti-sparkles"></i>Hispren AI</div>
+    <div class="brand"><div class="mark">H</div><div class="t">Hispren</div></div>
+    <div class="slab">Church</div>
+    <div class="nav on" data-v="home"       onclick="go('home')"><i class="ti ti-layout-dashboard"></i>Overview</div>
     <div class="nav"    data-v="members"    onclick="go('members')"><i class="ti ti-users"></i>Members</div>
-    <div class="nav"    data-v="duplicates" onclick="go('duplicates')"><i class="ti ti-copy"></i>Duplicates<span id="dBadge"></span></div>
     <div class="nav"    data-v="attendance" onclick="go('attendance')"><i class="ti ti-qrcode"></i>Attendance</div>
-    <div class="nav"    data-v="import"     onclick="go('import')"><i class="ti ti-upload"></i>Bulk import</div>
-
-    <div class="sec"><span>My church</span><span class="add">+ Add</span></div>
-    <div id="groups"></div>
-
-    <div class="nav" style="margin-top:18px"><i class="ti ti-settings"></i>Settings</div>
-
-    <div class="promo">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">
-        <i class="ti ti-device-mobile" style="font-size:14px;color:#fff"></i>
-        <span style="font-size:12px;color:#fff;font-weight:700">hispren</span></div>
-      <div style="font-size:11px;color:#DDD6FF;line-height:1.6;margin-bottom:12px">
-        Members with the app never miss an announcement.</div>
-      <button style="background:#fff;color:var(--violet-dk);font-size:12px;font-weight:700;
-        padding:7px 11px;border-radius:10px;width:100%">+ Invite members</button>
+    <div class="slab">Data</div>
+    <div class="nav"    data-v="duplicates" onclick="go('duplicates')"><i class="ti ti-copy"></i>Duplicates<span id="dBadge"></span></div>
+    <div class="nav"    data-v="import"     onclick="go('import')"><i class="ti ti-file-import"></i>Import</div>
+    <div class="who">
+      <div class="av" id="pAv">—</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--ink);overflow:hidden;
+          text-overflow:ellipsis;white-space:nowrap" id="pName">—</div>
+        <div class="muted" style="font-size:12px;cursor:pointer" onclick="logout()">Sign out</div>
+      </div>
     </div>
-    <div class="nav" style="margin-top:10px" onclick="logout()"><i class="ti ti-logout"></i>Sign out</div>
   </div>
 
   <div class="main">
-    <div class="muted" id="today">—</div>
-    <div class="hi" id="hi">—</div>
-    <div class="hi grad">How is your church doing today?</div>
-    <div class="acts">
-      <button class="act v" onclick="askAI()"><i class="ti ti-sparkles"></i>Ask Hispren</button>
-      <button class="act" onclick="openForm()">Register a member</button>
-      <button class="act" onclick="go('attendance')">Take attendance</button>
-      <button class="act" onclick="go('import')">Import a spreadsheet</button>
-      <button class="act" onclick="go('duplicates')">Review duplicates</button>
+    <div class="top">
+      <div><h1 id="hTitle">Overview</h1><div class="sub" id="hSub">—</div></div>
+      <div style="display:flex;gap:9px" id="hActs"></div>
     </div>
     <div id="view"></div>
   </div>
 </div></div>
-
-<button class="fab" onclick="openForm()" aria-label="Register a member"><i class="ti ti-plus"></i></button>
 <div id="modal"></div>
 
 <script>
@@ -244,8 +201,8 @@ let CHURCH='', ME=null, DUPES=[], MEMBERS=[];
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ini=n=>(n||'?').split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase();
-const GC=[['var(--violet)','ti-building-church'],['var(--blue)','ti-users-group'],
-          ['var(--mint)','ti-microphone-2'],['var(--amber)','ti-home-2']];
+const GC=['#4338CA','#0891B2','#059669','#D97706'];
+const GI=['building-church','users-group','microphone-2','home-2'];
 
 async function api(p,o={}){
   const r=await fetch(p,{...o,headers:{'Content-Type':'application/json','X-Church':CHURCH,...(o.headers||{})},credentials:'include'});
@@ -254,7 +211,6 @@ async function api(p,o={}){
   if(!r.ok) throw new Error(b.detail||b.error||'request failed');
   return b;
 }
-function askAI(){alert('Hispren AI arrives in Phase 2 — it needs the automation engine underneath it first.')}
 async function doLogin(){
   CHURCH=$('#church').value.trim().toLowerCase(); $('#lerr').innerHTML='';
   try{
@@ -266,207 +222,137 @@ function logout(){
   fetch('/api/auth/logout',{method:'POST',headers:{'X-Church':CHURCH},credentials:'include'}).catch(()=>{});
   sessionStorage.clear(); $('#app').style.display='none'; $('#login').style.display='flex';
 }
-
 async function boot(){
   ME=await api('/api/me');
   $('#login').style.display='none'; $('#app').style.display='block';
   $('#pName').textContent=ME.tenant.name; $('#pAv').textContent=ini(ME.tenant.name);
-  $('#today').textContent=new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'long'});
-  $('#hi').textContent='Hello there';
-  MEMBERS=(await api('/api/members?limit=200')).members;
+  MEMBERS=(await api('/api/members?limit=300')).members;
   DUPES=await api('/api/duplicates').catch(()=>[]);
   $('#dBadge').outerHTML=DUPES.length?`<span class="n" id="dBadge">${DUPES.length}</span>`:'<span id="dBadge"></span>';
-  const gs=[...new Set(MEMBERS.map(m=>m.home_group_name).filter(Boolean))];
-  $('#groups').innerHTML=gs.map((g,i)=>`<div class="dotrow" onclick="go('members')">
-    <span class="dot" style="background:${GC[i%4][0]}"></span>${esc(g)}</div>`).join('')
-    ||'<div class="muted" style="padding:7px 11px">No groups yet</div>';
   go('home');
 }
+function head(t,s,a=''){ $('#hTitle').textContent=t; $('#hSub').textContent=s; $('#hActs').innerHTML=a; }
 function go(v){
   document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('on',n.dataset.v===v));
   ({home:viewHome,members:viewMembers,attendance:viewAtt,duplicates:viewDupes,import:viewImport})[v]();
 }
 
-/* ================================ HOME ================================ */
+/* ============================== OVERVIEW ============================== */
 function viewHome(){
   const t=MEMBERS.length;
-  const call=MEMBERS.filter(m=>m.stage_key==='visitor'||m.stage_key==='first_timer');
+  const call=MEMBERS.filter(m=>['visitor','first_timer'].includes(m.stage_key));
   const noc=MEMBERS.filter(m=>!m.phone&&!m.phone_2&&!m.email).length;
   const reach=t?Math.round((t-noc)/t*100):0;
-  const withGroup=MEMBERS.filter(m=>m.home_group_name).length;
-  const gpct=t?Math.round(withGroup/t*100):0;
-  const dpct=t?Math.max(4,Math.min(100,Math.round(DUPES.length/t*100*6))):0;
+  const grouped=MEMBERS.filter(m=>m.home_group_name).length;
+  const gp=t?Math.round(grouped/t*100):0;
   const svc=k=>MEMBERS.filter(m=>m.usual_service===k).length;
   const S=[svc('1st Service'),svc('2nd Service'),svc('3rd Service')];
+  const top=Math.max(...S);
   const gs=[...new Set(MEMBERS.map(m=>m.home_group_name).filter(Boolean))];
 
-  // calendar strip — this week, Sunday highlighted
-  const now=new Date(); const dow=now.getDay();
-  const days=[...Array(7)].map((_,i)=>{ const d=new Date(now); d.setDate(now.getDate()-dow+i); return d; });
+  head('Overview', ME.tenant.name,
+    `<button class="btn-o btn" onclick="go('attendance')">Attendance</button>
+     <button class="btn" onclick="openForm()">Register member</button>`);
 
-  $('#view').innerHTML=`<div class="g2">
-  <div class="col">
-
-    <div class="card">
-      <div class="ch"><i class="ti ti-checkbox"></i><b>Follow-ups</b>
-        <span class="r"><i class="ti ti-plus" onclick="openForm()"></i><i class="ti ti-dots"></i></span></div>
-
-      <div class="grouphdr">
-        <i class="ti ti-chevron-down" style="font-size:13px;color:var(--muted)"></i>
-        <span class="pill p-v">TO CALL</span>
-        <span class="muted">${call.length} ${call.length===1?'person':'people'}</span></div>
-
-      <div class="thead"><span>Name</span><span>Priority</span><span>Waiting</span></div>
-      ${call.slice(0,4).map((m,i)=>`
-        <div class="trow" onclick="openMember('${m.id}')">
-          <div class="tname">
-            <i class="ti ti-chevron-right"></i>
-            <i class="ti ti-${m.stage_key==='visitor'?'user-question':'user-plus'}"></i>
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.full_name)}</span>
-          </div>
-          <span class="pill ${i<2?'p-p':'p-g'}">${i<2?'High':'Low'}</span>
-          <span style="font-size:12px;color:${i<2?'var(--pink-dk)':'var(--muted)'};font-weight:${i<2?600:400}">
-            ${i<2?'Today':(i+2)+' days'}</span>
-        </div>`).join('')||'<div class="muted" style="padding:10px 0">Nobody is waiting. Good.</div>'}
-      <div class="addrow" onclick="openForm()"><i class="ti ti-plus" style="font-size:13px"></i>Add a follow-up</div>
-
-      <div class="grouphdr" style="margin-top:8px">
-        <i class="ti ti-chevron-right" style="font-size:13px;color:var(--muted)"></i>
-        <span class="pill p-m">CONTACTED</span>
-        <span class="muted">${Math.max(0,t-call.length-noc)} people</span></div>
-      <div class="grouphdr" style="margin-top:8px">
-        <i class="ti ti-chevron-right" style="font-size:13px;color:var(--muted)"></i>
-        <span class="pill p-g">NO PHONE</span>
-        <span class="muted">${noc} ${noc===1?'person':'people'}</span></div>
-    </div>
-
-    <div class="card">
-      <div class="ch"><i class="ti ti-target-arrow"></i><b>Church health</b></div>
-
-      <div class="goal">
-        <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:7px">
-          <div><div style="font-size:13px;font-weight:500">Members we can reach</div>
-            <div class="muted">${t-noc} of ${t} · phone or email</div></div></div>
-        <div style="display:flex;align-items:center;gap:11px">
-          <div class="bar"><div style="width:${reach}%;background:var(--mint)"></div></div>
-          <b style="font-size:12px;min-width:32px;text-align:right">${reach}%</b></div>
-      </div>
-
-      <div class="goal">
-        <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:7px">
-          <div><div style="font-size:13px;font-weight:500">Members in a cell or department</div>
-            <div class="muted">${withGroup} of ${t} · nobody should be invisible</div></div></div>
-        <div style="display:flex;align-items:center;gap:11px">
-          <div class="bar"><div style="width:${gpct}%;background:${gpct<50?'var(--amber)':'var(--mint)'}"></div></div>
-          <b style="font-size:12px;min-width:32px;text-align:right">${gpct}%</b></div>
-      </div>
-
-      <div class="goal">
-        <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:7px">
-          <div><div style="font-size:13px;font-weight:500">Records needing review</div>
-            <div class="muted">${DUPES.length} possible duplicate${DUPES.length===1?'':'s'}</div></div></div>
-        <div style="display:flex;align-items:center;gap:11px">
-          <div class="bar"><div style="width:${dpct}%;background:var(--pink)"></div></div>
-          <b style="font-size:12px;min-width:32px;text-align:right">${DUPES.length}</b></div>
-      </div>
-    </div>
+  $('#view').innerHTML=`
+  <div class="kpis">
+    <div class="kpi acc"><div class="l">Members</div><div class="v">${t}</div>
+      <div class="d muted">${grouped} in a group</div></div>
+    <div class="kpi ${call.length?'warn':''}"><div class="l">Awaiting a call</div>
+      <div class="v">${call.length}</div>
+      <div class="d" style="color:${call.length?'var(--warn)':'var(--muted)'}">
+        ${call.length?'First 72 hours decide':'Nobody waiting'}</div></div>
+    <div class="kpi ${DUPES.length?'bad':''}"><div class="l">Duplicates</div>
+      <div class="v">${DUPES.length}</div>
+      <div class="d" style="color:${DUPES.length?'var(--bad)':'var(--muted)'}">
+        ${DUPES.length?'Need review':'Clean'}</div></div>
+    <div class="kpi"><div class="l">Reachable</div><div class="v">${reach}%</div>
+      <div class="d muted">${noc} with no contact</div></div>
   </div>
 
-  <div class="col">
-
+  <div class="g2">
+   <div class="col">
     <div class="card">
-      <div class="ch"><i class="ti ti-layout-grid"></i><b>Groups</b>
-        <span class="r">All <i class="ti ti-chevron-down"></i></span></div>
-      <div class="gtiles">
-        <div class="gt new" onclick="alert('Group creation ships with the Cells module.')">
-          <div class="gicon" style="background:var(--chip)"><i class="ti ti-plus" style="color:var(--muted)"></i></div>
-          <div style="font-size:12px;font-weight:600">New group</div>
-        </div>
-        ${gs.slice(0,3).map((g,i)=>{
-          const n=MEMBERS.filter(m=>m.home_group_name===g).length;
-          return `<div class="gt" onclick="go('members')">
-            <div class="gicon" style="background:${GC[i%4][0]}"><i class="ti ${GC[i%4][1]}"></i></div>
-            <div style="min-width:0">
-              <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g)}</div>
-              <div class="muted">${n} member${n===1?'':'s'}</div>
-            </div></div>`;}).join('')}
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="ch"><i class="ti ti-calendar"></i><b>${now.toLocaleDateString('en-GB',{month:'long'})}</b>
-        <span class="r"><i class="ti ti-chevron-left"></i><i class="ti ti-chevron-right"></i></span></div>
-      <div class="days">
-        ${days.map(d=>`<div class="day ${d.getDay()===0?'on':''}">
-          <div class="w">${d.toLocaleDateString('en-GB',{weekday:'short'})}</div>
-          <div class="d">${String(d.getDate()).padStart(2,'0')}</div></div>`).join('')}
-      </div>
-      <div class="event">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div><div style="font-size:13px;font-weight:600">Sunday service</div>
-            <div class="muted">2nd service · 9:00 – 11:00 am</div></div>
-          <i class="ti ti-dots" style="font-size:15px;color:var(--muted);cursor:pointer"></i></div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:11px">
-          <span class="pill p-v"><i class="ti ti-qrcode" style="font-size:11px"></i> QR check-in</span>
-          <div class="stack">
-            ${MEMBERS.slice(0,3).map((m,i)=>`<div class="av"
-              style="background:${['var(--violet-soft)','var(--mint-soft)','var(--pink-soft)'][i]};
-                     color:${['var(--violet-dk)','var(--mint-dk)','var(--pink-dk)'][i]}">
-              ${ini(m.full_name)}</div>`).join('')}
-            ${MEMBERS.length>3?`<span class="muted" style="margin-left:7px">+${MEMBERS.length-3}</span>`:''}
+      <div class="ch"><i class="ti ti-phone-call"></i><h3>Needs a call</h3>
+        <span class="r">${call.length}</span></div>
+      ${call.slice(0,5).map(m=>`
+        <div class="li" onclick="openMember('${m.id}')" style="cursor:pointer">
+          <div class="av">${ini(m.full_name)}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;color:var(--ink)">${esc(m.full_name)}</div>
+            <div class="muted">${esc(m.stage_label)} · ${esc(m.home_group_name||'no group')}</div>
           </div>
-        </div>
-      </div>
-      <div style="display:flex;gap:7px;margin-top:12px">
-        ${['1st','2nd','3rd'].map((l,i)=>{
-          const on=S[i]===Math.max(...S)&&Math.max(...S)>0;
-          return `<div style="flex:1;text-align:center;padding:9px 0;border-radius:11px;
-            background:${on?'var(--violet)':'var(--violet-wash)'}">
-            <div style="font-size:11px;color:${on?'#CFC4FF':'var(--muted)'}">${l}</div>
-            <div style="font-size:16px;font-weight:700;color:${on?'#fff':'var(--text)'}">${S[i]}</div>
-          </div>`;}).join('')}
-      </div>
+          <span class="tag ${m.phone?'t-w':'t-n'}">${m.phone?'Call':'No phone'}</span>
+        </div>`).join('')||'<div class="muted">Nobody is waiting.</div>'}
     </div>
 
     <div class="card">
-      <div class="ch"><i class="ti ti-bell"></i><b>Reminders</b>
-        <span class="r">Today · ${(DUPES.length?1:0)+(noc?1:0)+1} <i class="ti ti-chevron-down"></i></span></div>
-      ${DUPES.length?`<div class="rem">
-        <span class="dot" style="background:var(--pink);margin-top:6px"></span>
-        <div class="t">${DUPES.length} possible duplicate member${DUPES.length===1?'':'s'}. Review before they get two welcome texts.</div>
-        <i class="ti ti-chevron-right" onclick="go('duplicates')"></i></div>`:''}
-      ${noc?`<div class="rem">
-        <span class="dot" style="background:var(--amber);margin-top:6px"></span>
-        <div class="t">${noc} member${noc===1?'':'s'} have no phone or email. They cannot be reached at all.</div>
-        <i class="ti ti-chevron-right" onclick="go('members')"></i></div>`:''}
-      <div class="rem">
-        <span class="dot" style="background:var(--mint);margin-top:6px"></span>
-        <div class="t">${call.length} first timer${call.length===1?'':'s'} waiting on a call. The first 72 hours decide whether they come back.</div>
-        <i class="ti ti-chevron-right" onclick="go('members')"></i></div>
+      <div class="ch"><i class="ti ti-activity"></i><h3>Data health</h3></div>
+      <div class="meter">
+        <div style="display:flex;justify-content:space-between;margin-bottom:7px">
+          <div><div style="font-weight:600;color:var(--ink);font-size:14px">Members we can reach</div>
+            <div class="muted">${t-noc} of ${t} have a phone or email</div></div>
+          <div class="num" style="font-size:18px">${reach}%</div></div>
+        <div class="bar"><div style="width:${reach}%;background:${reach>80?'var(--good)':'var(--warn)'}"></div></div>
+      </div>
+      <div class="meter">
+        <div style="display:flex;justify-content:space-between;margin-bottom:7px">
+          <div><div style="font-weight:600;color:var(--ink);font-size:14px">In a cell or department</div>
+            <div class="muted">${grouped} of ${t} — nobody should be invisible</div></div>
+          <div class="num" style="font-size:18px">${gp}%</div></div>
+        <div class="bar"><div style="width:${gp}%;background:${gp>70?'var(--good)':'var(--warn)'}"></div></div>
+      </div>
     </div>
-  </div>
+   </div>
+
+   <div class="col">
+    <div class="card">
+      <div class="ch"><i class="ti ti-building-church"></i><h3>By service</h3>
+        <span class="r">${t} members</span></div>
+      <div class="svc">
+        ${['1st','2nd','3rd'].map((l,i)=>`<div class="sv ${top&&S[i]===top?'on':''}">
+          <div class="l">${l}</div><div class="v">${S[i]}</div></div>`).join('')}
+      </div>
+      <div class="muted" style="margin-top:14px">
+        A single attendance number hides which service is growing.</div>
+    </div>
+
+    <div class="card">
+      <div class="ch"><i class="ti ti-layout-grid"></i><h3>Groups</h3>
+        <span class="r">${gs.length}</span></div>
+      ${gs.map((g,i)=>{const n=MEMBERS.filter(m=>m.home_group_name===g).length;
+        return `<div class="li" onclick="go('members')" style="cursor:pointer">
+          <div class="g" style="background:${GC[i%4]}"><i class="ti ti-${GI[i%4]}"></i></div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;color:var(--ink)">${esc(g)}</div>
+            <div class="muted">${n} member${n===1?'':'s'}</div></div>
+          <i class="ti ti-chevron-right" style="color:var(--faint)"></i>
+        </div>`;}).join('')||'<div class="muted">No groups yet.</div>'}
+    </div>
+   </div>
   </div>`;
 }
 
-/* ============================== MEMBERS =============================== */
+/* =============================== MEMBERS ============================== */
 async function viewMembers(q=''){
-  const d=await api('/api/members?limit=200'+(q?'&q='+encodeURIComponent(q):''));
+  const d=await api('/api/members?limit=300'+(q?'&q='+encodeURIComponent(q):''));
   const flag=new Set(DUPES.flatMap(x=>[x.person_a.id,x.person_b.id]));
+  head('Members', `${d.total} on the roll`,
+    `<button class="btn" onclick="openForm()">Register member</button>`);
   $('#view').innerHTML=`<div class="card">
-    <div class="ch"><i class="ti ti-users"></i><b>Members</b>
-      <span class="r">${d.total} total</span></div>
-    <div style="display:flex;gap:9px;margin-bottom:14px">
-      <input id="q" value="${esc(q)}" placeholder="Search name, phone, code">
-      <button class="btn" style="white-space:nowrap" onclick="openForm()">+ Register</button></div>
-    <table><thead><tr><th>Member</th><th>Phone</th><th>Stage</th><th>Group</th><th>Service</th></tr></thead>
-    <tbody>${d.members.map(m=>`<tr class="${flag.has(m.id)?'dupe':''}" onclick="openMember('${m.id}')">
-      <td><div style="display:flex;align-items:center;gap:11px">
+    <div style="margin-bottom:18px">
+      <input id="q" value="${esc(q)}" placeholder="Search by name, phone, or member code"></div>
+    <table><thead><tr>
+      <th>Member</th><th>Phone</th><th>Stage</th><th>Group</th><th>Service</th></tr></thead>
+    <tbody>${d.members.map(m=>`<tr class="${flag.has(m.id)?'flag':''}" onclick="openMember('${m.id}')">
+      <td><div style="display:flex;align-items:center;gap:12px">
         <div class="av">${ini(m.full_name)}</div>
-        <div><div style="font-weight:600">${esc(m.full_name)}</div>
-        ${flag.has(m.id)?'<div class="muted" style="color:var(--pink-dk)">Possible duplicate</div>':''}</div>
+        <div><div style="font-weight:600;color:var(--ink)">${esc(m.full_name)}</div>
+        ${flag.has(m.id)?'<div class="muted" style="color:var(--bad);font-size:12px">Possible duplicate</div>':
+          m.state_of_origin?`<div class="muted" style="font-size:12px">${esc(m.state_of_origin)}</div>`:''}</div>
       </div></td>
       <td class="muted">${esc(m.phone||m.phone_2||'—')}</td>
-      <td><span class="pill ${m.stage_key==='first_timer'?'p-m':m.stage_key==='visitor'?'p-p':'p-v'}">${esc(m.stage_label||'—')}</span></td>
+      <td><span class="tag ${m.stage_key==='first_timer'?'t-g':m.stage_key==='visitor'?'t-w':'t-b'}">${esc(m.stage_label||'—')}</span></td>
       <td class="muted">${esc(m.home_group_name||'—')}</td>
       <td class="muted">${esc((m.usual_service||'—').replace(' Service',''))}</td>
     </tr>`).join('')||'<tr><td colspan="5" class="muted">No members found.</td></tr>'}
@@ -479,40 +365,42 @@ async function openMember(id){
   const m=await api('/api/members/'+id);
   const qr=await api(`/api/members/${id}/qr`).catch(()=>null);
   let h=null; try{h=await api(`/api/members/${id}/health`)}catch(e){}
-  const f=(l,v)=>v?`<div class="row"><span class="muted">${l}</span><span>${esc(v)}</span></div>`:'';
+  const f=(k,v)=>v?`<div class="row"><span class="k">${k}</span><span class="v">${esc(v)}</span></div>`:'';
   const carrier=h&&['AS','SS','AC','SC'].includes(h.genotype);
   $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">
-      <div class="av" style="width:52px;height:52px;font-size:17px">${ini(m.full_name)}</div>
-      <div style="flex:1"><div style="font-size:19px;font-weight:700">${esc(m.full_name)}</div>
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">
+      <div class="av" style="width:56px;height:56px;font-size:19px;border-radius:9px">${ini(m.full_name)}</div>
+      <div style="flex:1">
+        <div class="h" style="font-size:22px;font-weight:500">${esc(m.full_name)}</div>
         <div class="muted">${esc(m.stage_label||'')} · ${esc(m.home_group_name||'no group')}</div></div>
-      <span class="pill p-g">${esc(m.source||'')}</span></div>
-    <div class="sect">CONTACT</div>
+      <span class="tag t-n">${esc(m.source||'')}</span></div>
+    <div class="sect">Contact</div>
     ${f('Phone',m.phone)}${f('Second phone',m.phone_2)}${f('Email',m.email)}
     ${f('Address',m.address)}${f('Town',m.town)}${f('LGA',m.lga)}
-    <div class="sect">ORIGIN</div>
+    <div class="sect">Origin</div>
     ${f('State of origin',m.state_of_origin)}${f('LGA of origin',m.lga_of_origin)}
     ${f('Date of birth',(m.date_of_birth||'').slice(0,10))}${f('Gender',m.gender)}${f('Marital status',m.marital_status)}
-    <div class="sect">CHURCH</div>
+    <div class="sect">Church</div>
     ${f('Service',m.usual_service)}${f('Post held',m.post_held)}
-    ${f('Work / school',m.occupation)}${f('Place of work',m.workplace)}
-    ${h?`<div class="sect">HEALTH — PASTOR ONLY. THIS VIEW WAS LOGGED.</div>
-      <div class="row"><span class="muted">Genotype</span>
-        <span class="pill ${carrier?'p-p':'p-m'}">${esc(h.genotype||'—')}</span></div>
+    ${f('Work or school',m.occupation)}${f('Place of work',m.workplace)}
+    ${h?`<div class="sect">Health — pastor only. This view was logged.</div>
+      <div class="row"><span class="k">Genotype</span>
+        <span class="tag ${carrier?'t-r':'t-g'}">${esc(h.genotype||'—')}</span></div>
       ${f('Blood group',h.blood_group)}
-      ${carrier?`<div style="background:var(--pink-soft);color:var(--pink-dk);padding:12px 14px;
-        border-radius:13px;font-size:12px;line-height:1.7;margin-top:10px">
-        Carrier. Flag before marriage counselling — AS x AS carries a 1-in-4 risk of a child
-        with sickle cell disease.</div>`:''}`:''}
-    ${qr?`<div class="sect">QR IDENTITY</div>
-      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-        <img alt="QR code" width="104" height="104" style="border-radius:13px;border:1px solid var(--line)"
-          src="https://api.qrserver.com/v1/create-qr-code/?size=104x104&data=${encodeURIComponent(qr.qr_token)}">
-        <div style="flex:1;min-width:190px"><div class="muted" style="line-height:1.7">Scanned at the gate to mark
-          attendance. If it leaks, rotate it — no need to reprint an ID card.</div>
-          <button class="btn btn-o" style="margin-top:10px" onclick="rot('${id}')">Rotate code</button></div>
+      ${carrier?`<div style="background:var(--bad-soft);color:var(--bad);padding:14px 16px;
+        border-radius:9px;font-size:13px;line-height:1.7;margin-top:12px">
+        <b>Carrier.</b> Flag before marriage counselling — AS x AS carries a 1-in-4 risk of a
+        child with sickle cell disease.</div>`:''}`:''}
+    ${qr?`<div class="sect">QR identity</div>
+      <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+        <img alt="QR code" width="110" height="110" style="border-radius:9px;border:1px solid var(--line)"
+          src="https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(qr.qr_token)}">
+        <div style="flex:1;min-width:200px"><div class="muted" style="line-height:1.75">
+          Scanned at the gate to mark attendance. If it leaks, rotate it — no need to reprint
+          an ID card.</div>
+          <button class="btn btn-o" style="margin-top:12px" onclick="rot('${id}')">Rotate code</button></div>
       </div>`:''}
-    <button class="btn btn-o" style="width:100%;margin-top:24px" onclick="close_()">Close</button>
+    <button class="btn btn-o" style="width:100%;margin-top:28px" onclick="close_()">Close</button>
   </div></div>`;
 }
 async function rot(id){await api(`/api/members/${id}/qr/rotate`,{method:'POST'});openMember(id)}
@@ -521,29 +409,29 @@ function close_(){$('#modal').innerHTML=''}
 function openForm(){
   const t=(n,l,ty='text')=>`<div class="field"><label>${l}</label><input id="f_${n}" type="${ty}"></div>`;
   $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
-    <div style="font-size:20px;font-weight:700">Register a member</div>
-    <div class="muted" style="margin-bottom:22px;line-height:1.7">
+    <div class="h" style="font-size:22px;font-weight:500">Register a member</div>
+    <div class="muted" style="margin-bottom:26px">
       Phone numbers are cleaned automatically. Duplicates are flagged, never merged without you.</div>
     <div id="ferr"></div>
-    <div class="sect">NAME</div>
+    <div class="sect">Name</div>
     <div class="g3">${t('first_name','First name')}${t('middle_name','Other name')}${t('last_name','Surname')}</div>
-    <div class="sect">CONTACT — MOST PEOPLE CARRY TWO SIMS</div>
+    <div class="sect">Contact — most people carry two SIMs</div>
     <div class="gg2">${t('phone','Phone 1')}${t('phone_2','Phone 2')}</div>${t('email','Email','email')}
-    <div class="sect">ORIGIN</div>
+    <div class="sect">Origin</div>
     <div class="gg2">${t('state_of_origin','State of origin')}${t('lga_of_origin','LGA of origin')}</div>
-    <div class="sect">RESIDENCE</div>${t('address','Address')}
+    <div class="sect">Residence</div>${t('address','Address')}
     <div class="gg2">${t('town','Town')}${t('lga','LGA')}</div>
-    <div class="sect">DETAILS</div>
+    <div class="sect">Details</div>
     <div class="gg2">
       <div class="field"><label>Gender</label><select id="f_gender">
-        <option value="">-</option><option value="male">Male</option><option value="female">Female</option></select></div>
+        <option value="">—</option><option value="male">Male</option><option value="female">Female</option></select></div>
       ${t('date_of_birth','Date of birth','date')}</div>
-    <div class="gg2">${t('occupation','Work / school')}${t('workplace','Place of work / school')}</div>
+    <div class="gg2">${t('occupation','Work or school')}${t('workplace','Place of work or school')}</div>
     <div class="gg2">
       <div class="field"><label>Service</label><select id="f_usual_service">
-        <option value="">-</option><option>1st Service</option><option>2nd Service</option><option>3rd Service</option></select></div>
+        <option value="">—</option><option>1st Service</option><option>2nd Service</option><option>3rd Service</option></select></div>
       ${t('post_held','Post held')}</div>
-    <div style="display:flex;gap:10px;margin-top:24px">
+    <div style="display:flex;gap:12px;margin-top:28px">
       <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
       <button class="btn" style="flex:2" onclick="save()">Register member</button></div>
   </div></div>`;
@@ -557,105 +445,107 @@ async function save(){
   catch(e){$('#ferr').innerHTML=`<div class="err">${esc(e.message)}</div>`}
 }
 
-/* ============================ ATTENDANCE ============================== */
+/* ============================= ATTENDANCE ============================= */
 async function viewAtt(){
-  const [svcs, rows] = await Promise.all([
-    api('/api/services'),
-    api('/api/attendance/by-service').catch(()=>[])
-  ]);
-  const total = rows.reduce((a,r)=>a+(r.present||0),0);
-  const top = Math.max(0,...rows.map(r=>r.present||0));
-  $('#view').innerHTML = `
+  const [svcs,rows]=await Promise.all([
+    api('/api/services').catch(()=>[]),
+    api('/api/attendance/by-service').catch(()=>[])]);
+  const total=rows.reduce((a,r)=>a+(r.present||0),0);
+  const top=Math.max(0,...rows.map(r=>r.present||0));
+  head('Attendance', new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'}),
+    `<a href="/scan.html?church=${encodeURIComponent(CHURCH)}" target="_blank" class="btn"
+       style="text-decoration:none">Open scanner</a>`);
+  $('#view').innerHTML=`
+   <div class="kpis">
+     ${rows.map(r=>`<div class="kpi ${r.present===top&&top?'acc':''}">
+       <div class="l">${esc(r.service)}</div><div class="v">${r.present||0}</div>
+       <div class="d muted">${r.first_timers||0} first-timers</div></div>`).join('')
+       ||'<div class="kpi"><div class="l">Today</div><div class="v">0</div>
+          <div class="d muted">No sessions opened</div></div>'}
+     <div class="kpi"><div class="l">Total today</div><div class="v">${total}</div>
+       <div class="d muted">Across all services</div></div>
+   </div>
+
    <div class="card" style="margin-bottom:16px">
-     <div class="ch"><i class="ti ti-qrcode"></i><b>Today at the gate</b>
-       <span class="r">${total} present</span></div>
-     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-       ${rows.map(r=>{const on=r.present===top&&top>0;return `
-         <div style="flex:1;min-width:96px;text-align:center;padding:12px 8px;border-radius:13px;
-              background:${on?'var(--violet)':'var(--violet-wash)'}">
-           <div style="font-size:11px;color:${on?'#CFC4FF':'var(--muted)'}">${esc(r.service)}</div>
-           <div style="font-size:22px;font-weight:700;color:${on?'#fff':'var(--text)'}">${r.present||0}</div>
-           ${r.first_timers?`<div style="font-size:11px;color:${on?'#CFC4FF':'var(--mint-dk)'}">
-             ${r.first_timers} new</div>`:''}
-         </div>`;}).join('')||'<div class="muted">No services set up yet.</div>'}
-     </div>
-     <div style="background:var(--violet-wash);border-radius:15px;padding:16px">
-       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-         <i class="ti ti-device-mobile" style="font-size:26px;color:var(--violet)"></i>
-         <div style="flex:1;min-width:220px">
-           <div style="font-size:13px;font-weight:700">Open the scanner on an usher's phone</div>
-           <div class="muted" style="line-height:1.7">It caches the roster, then works with
-             <b>no internet at all</b>. Every scan is held on the phone and uploaded when the
-             signal returns. 3,000 people in 30 minutes is 1.7 scans a second — a round-trip
-             per scan would back the gate up.</div>
-         </div>
-         <a href="/scan.html?church=${encodeURIComponent(CHURCH)}" target="_blank"
-            class="btn" style="text-decoration:none;white-space:nowrap">Open scanner</a>
+     <div class="note">
+       <i class="ti ti-device-mobile" style="font-size:30px;color:var(--brand)"></i>
+       <div style="flex:1;min-width:240px">
+         <div class="h" style="font-size:16px;font-weight:500;margin-bottom:4px">
+           The scanner works with no internet</div>
+         <div class="muted" style="line-height:1.75">Open it on an usher's phone. It caches the
+           roster first, then validates every scan on the device. Scans are held on the phone and
+           uploaded when the signal comes back. 3,000 people in 30 minutes is 1.7 scans a second —
+           a round-trip to the server per scan would back the gate up.</div>
        </div>
+       <a href="/scan.html?church=${encodeURIComponent(CHURCH)}" target="_blank" class="btn"
+          style="text-decoration:none;white-space:nowrap">Open scanner</a>
      </div>
    </div>
+
    <div class="card">
-     <div class="ch"><i class="ti ti-calendar-event"></i><b>Services</b></div>
-     ${svcs.map(s=>`<div style="display:flex;align-items:center;gap:12px;padding:11px 0;
-        border-top:1px solid var(--line2)">
-        <div class="gicon" style="width:32px;height:32px;background:${
-          s.kind==='sunday'?'var(--violet)':'var(--blue)'}">
-          <i class="ti ti-${s.kind==='sunday'?'building-church':'users-group'}"></i></div>
-        <div style="flex:1"><div style="font-size:13px;font-weight:600">${esc(s.name)}</div>
-          <div class="muted">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][s.day_of_week]||''}
-            ${s.start_time?'· '+String(s.start_time).slice(0,5):''}</div></div>
-        <span class="pill p-g">${esc(s.kind)}</span>
-      </div>`).join('')||'<div class="muted">None yet.</div>'}
+     <div class="ch"><i class="ti ti-calendar-event"></i><h3>Services</h3>
+       <span class="r">${svcs.length}</span></div>
+     ${svcs.map((s,i)=>`<div class="li">
+       <div class="g" style="background:${s.kind==='sunday'?'var(--brand)':'#0891B2'}">
+         <i class="ti ti-${s.kind==='sunday'?'building-church':'users-group'}"></i></div>
+       <div style="flex:1"><div style="font-weight:600;color:var(--ink)">${esc(s.name)}</div>
+         <div class="muted">${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][s.day_of_week]||''}
+           ${s.start_time?'· '+String(s.start_time).slice(0,5):''}</div></div>
+       <span class="tag t-n">${esc(s.kind)}</span>
+     </div>`).join('')||'<div class="muted">No services yet. Run migration 005 in Neon.</div>'}
    </div>`;
 }
 
-/* ============================ DUPLICATES ============================== */
+/* ============================= DUPLICATES ============================= */
 async function viewDupes(){
   DUPES=await api('/api/duplicates');
+  head('Duplicates', `${DUPES.length} pair${DUPES.length===1?'':'s'} to review`);
   $('#view').innerHTML=`
    <div class="card" style="margin-bottom:16px">
-     <div class="ch"><i class="ti ti-copy"></i><b>Duplicates</b></div>
      <div class="muted" style="line-height:1.8">
-       A name alone is never enough — Nigerian names repeat. These records share a phone number,
-       an email, or a date of birth. Nothing is merged without you.</div></div>
+       A name alone is never enough — Nigerian names repeat heavily. These records share a
+       <b style="color:var(--ink)">phone number, an email, or a date of birth</b>.
+       Nothing is merged without you, and the record you discard is kept in full, forever.</div>
+   </div>
    ${DUPES.length?DUPES.map(x=>`<div class="card" style="margin-bottom:16px">
-     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap">
-       <div style="display:flex;gap:7px;flex-wrap:wrap">
-         ${(x.reasons||[]).map(r=>`<span class="pill p-p">${esc(r)}</span>`).join('')}</div>
-       <span class="muted">score ${x.score}</span></div>
+     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;
+          gap:10px;flex-wrap:wrap">
+       <div style="display:flex;gap:8px;flex-wrap:wrap">
+         ${(x.reasons||[]).map(r=>`<span class="tag t-r">${esc(r)}</span>`).join('')}</div>
+       <span class="muted">confidence <b class="num" style="color:var(--ink)">${x.score}</b></span></div>
      <div class="gg2">
        ${[x.person_a,x.person_b].map((p,i)=>`
-         <div style="border:1px solid var(--line);border-radius:15px;padding:14px">
-           <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+         <div style="border:1px solid var(--line);border-radius:10px;padding:18px">
+           <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
              <div class="av">${ini(p.name)}</div>
-             <div><div style="font-weight:700;font-size:13px">${esc(p.name)}</div>
+             <div><div style="font-weight:700;color:var(--ink)">${esc(p.name)}</div>
              <div class="muted">${esc(p.phone||'no phone')}</div></div></div>
            <div class="muted">${esc(p.source||'')} · added ${new Date(p.created_at).toLocaleDateString('en-GB')}</div>
-           <button class="btn" style="width:100%;margin-top:12px"
-             onclick="mg('${p.id}','${(i?x.person_a:x.person_b).id}')">Keep this one</button>
+           <button class="btn" style="width:100%;margin-top:16px"
+             onclick="mg('${p.id}','${(i?x.person_a:x.person_b).id}')">Keep this record</button>
          </div>`).join('')}</div>
-     <button class="btn btn-o" style="width:100%;margin-top:12px" onclick="dis('${x.id}')">
+     <button class="btn btn-o" style="width:100%;margin-top:14px" onclick="dis('${x.id}')">
        These are different people</button>
    </div>`).join('')
    :'<div class="card muted">Nothing to review.</div>'}`;
 }
 async function mg(keep,drop){
-  if(!confirm('Merge these? The other record is archived - but kept in full in the merge log, forever.'))return;
+  if(!confirm('Merge these records? The other one is archived — but kept in full in the merge log, forever.'))return;
   await api('/api/duplicates/merge',{method:'POST',body:JSON.stringify({keep_id:keep,merge_id:drop})});
   await boot(); go('duplicates');
 }
 async function dis(id){await api(`/api/duplicates/${id}/dismiss`,{method:'POST'});await boot();go('duplicates')}
 
-/* ============================== IMPORT ================================ */
+/* =============================== IMPORT ============================== */
 function viewImport(){
+  head('Import','Bring a spreadsheet in');
   $('#view').innerHTML=`<div class="card">
-    <div class="ch"><i class="ti ti-upload"></i><b>Bulk import</b></div>
-    <div class="muted" style="line-height:1.8;margin-bottom:16px">
-      Upload a CSV. Columns are matched for you, phone numbers cleaned, dates read in Nigerian
-      order. Nothing is written until you say so - and any import can be undone.</div>
+    <div class="muted" style="line-height:1.8;margin-bottom:20px">
+      Upload a CSV. Columns are matched for you, phone numbers cleaned, and dates read in
+      Nigerian order. Nothing is written until you confirm — and any import can be undone.</div>
     <input type="file" id="csv" accept=".csv"
-      style="border:1px dashed var(--line);padding:24px;border-radius:15px;background:var(--violet-wash)">
-    <div id="pv" style="margin-top:18px"></div></div>`;
+      style="border:1px dashed var(--line);padding:28px;border-radius:10px;background:var(--brand-wash)">
+    <div id="pv" style="margin-top:22px"></div></div>`;
   $('#csv').onchange=async e=>{
     const file=e.target.files[0]; if(!file)return;
     const csv=await file.text(); $('#pv').innerHTML='<div class="muted">Reading…</div>';
@@ -663,20 +553,20 @@ function viewImport(){
       const p=await api('/api/import/preview',{method:'POST',body:JSON.stringify({filename:file.name,csv})});
       window._i={csv,...p};
       $('#pv').innerHTML=`
-        <div style="display:flex;gap:26px;margin-bottom:18px">
-          <div><div class="muted">Rows</div><div style="font-size:23px;font-weight:700">${p.total}</div></div>
-          <div><div class="muted">Valid</div><div style="font-size:23px;font-weight:700;color:var(--mint-dk)">${p.valid}</div></div>
-          <div><div class="muted">Problems</div><div style="font-size:23px;font-weight:700;color:${p.errors?'var(--pink-dk)':'inherit'}">${p.errors}</div></div>
+        <div class="kpis" style="margin-bottom:20px">
+          <div class="kpi"><div class="l">Rows</div><div class="v">${p.total}</div></div>
+          <div class="kpi acc"><div class="l">Valid</div><div class="v">${p.valid}</div></div>
+          <div class="kpi ${p.errors?'bad':''}"><div class="l">Problems</div><div class="v">${p.errors}</div></div>
         </div>
-        <div class="muted" style="margin-bottom:7px">Columns we matched</div>
-        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">
-          ${Object.entries(p.column_map).map(([h,f])=>`<span class="pill p-v">${esc(h)} → ${esc(f)}</span>`).join('')}</div>
-        ${p.unmapped_columns.length?`<div class="muted" style="margin-bottom:7px">Ignored</div>
-          <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">
-            ${p.unmapped_columns.map(c=>`<span class="pill p-g">${esc(c)}</span>`).join('')}</div>`:''}
-        ${p.preview.filter(r=>r.warnings.length||r.errors.length).slice(0,6)
-          .map(r=>`<div class="muted" style="margin-bottom:4px">Row ${r.row}: ${esc([...r.errors,...r.warnings].join(' · '))}</div>`).join('')}
-        <button class="btn" style="width:100%;margin-top:16px" onclick="commit()">
+        <div class="sect">Columns matched</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">
+          ${Object.entries(p.column_map).map(([h,f])=>`<span class="tag t-b">${esc(h)} → ${esc(f)}</span>`).join('')}</div>
+        ${p.unmapped_columns.length?`<div class="sect">Ignored</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">
+            ${p.unmapped_columns.map(c=>`<span class="tag t-n">${esc(c)}</span>`).join('')}</div>`:''}
+        ${p.preview.filter(r=>r.warnings.length||r.errors.length).slice(0,8)
+          .map(r=>`<div class="muted" style="margin-bottom:5px">Row ${r.row}: ${esc([...r.errors,...r.warnings].join(' · '))}</div>`).join('')}
+        <button class="btn" style="width:100%;margin-top:20px" onclick="commit()">
           Import ${p.valid} member${p.valid===1?'':'s'}</button>`;
     }catch(err){$('#pv').innerHTML=`<div class="err">${esc(err.message)}</div>`}
   };
