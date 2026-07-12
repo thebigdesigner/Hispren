@@ -1,3 +1,9 @@
+/**
+ * Worker. Needs Redis + bullmq (optionalDependencies).
+ * Run it as a SEPARATE Railway service with its own start command:
+ *   npx tsx src/worker.ts
+ * The API image does not ship these packages.
+ */
 /** Worker process: outbox relay + scheduled jobs. Needs Redis. The API does not. */
 import { Worker } from "bullmq";
 import IORedis from "ioredis";
