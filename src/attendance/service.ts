@@ -130,3 +130,104 @@ export async function present(tx: Tx, sessionId: string, limit = 50) {
       ORDER BY a.recorded_at DESC LIMIT $2`, [sessionId, limit]);
   return rows;
 }
+
+
+// ---------------------------------------------------------------------------
+// MANUAL ENTRY
+//
+// The scanner will fail. A member forgets their phone. A QR is smudged. An
+// usher marks the wrong person. A scanner with no manual fallback gets
+// abandoned the first Sunday it lets someone down.
+// ---------------------------------------------------------------------------
+
+export async function markPresent(
+  tx: Tx, sessionId: string, personId: string, userId: string
+) {
+  const { rows } = await tx.query(
+    `INSERT INTO attendance (tenant_id, session_id, person_id, method, recorded_at, recorded_by)
+     VALUES (current_tenant_id(), $1, $2, 'manual', now(), $3)
+     ON CONFLICT (session_id, person_id) DO NOTHING
+     RETURNING person_id`,
+    [sessionId, personId, userId]);
+  if (rows[0]) {
+    await publish(tx, {
+      type: "attendance.recorded", entityType: "person",
+      entityId: personId, payload: { session_id: sessionId, method: "manual" },
+    });
+  }
+  return { marked: rows.length > 0 };
+}
+
+/**
+ * Undo. Ushers mark the wrong person constantly — same surname, wrong Chinedu.
+ * The correction is logged: attendance is a record a church may be audited on.
+ */
+export async function unmark(tx: Tx, sessionId: string, personId: string, userId: string) {
+  const { rows } = await tx.query(
+    `DELETE FROM attendance WHERE session_id = $1 AND person_id = $2
+     RETURNING method, recorded_at`, [sessionId, personId]);
+  if (!rows[0]) return { removed: false };
+
+  await tx.query(
+    `INSERT INTO audit_log (tenant_id, actor_user, action, entity_type, entity_id, before)
+     VALUES (current_tenant_id(), $1, 'attendance.removed', 'person', $2, $3)`,
+    [userId, personId, JSON.stringify({ session_id: sessionId, ...rows[0] })]);
+
+  // Recompute the streak — it was incremented on insert.
+  await tx.query(
+    `UPDATE persons SET attendance_streak = GREATEST(0, attendance_streak - 1)
+      WHERE id = $1`, [personId]);
+  return { removed: true };
+}
+
+/**
+ * The roster for the manual sheet: everyone, with a present flag.
+ * This is what an usher sees on a tablet at the door.
+ */
+export async function markSheet(tx: Tx, sessionId: string, q?: string) {
+  const params: unknown[] = [sessionId];
+  let filter = "";
+  if (q) {
+    params.push(`%${q}%`);
+    filter = `AND ((coalesce(p.first_name,'')||' '||coalesce(p.middle_name,'')||' '
+                    ||coalesce(p.last_name,'')) ILIKE $2
+                   OR p.phone ILIKE $2 OR p.member_code ILIKE $2)`;
+  }
+  const { rows } = await tx.query(
+    `SELECT p.id,
+            trim(coalesce(p.first_name,'')||' '||coalesce(p.last_name,'')) AS name,
+            p.phone, p.usual_service,
+            g.name AS group_name,
+            js.label AS stage_label, js.key AS stage_key,
+            (a.id IS NOT NULL) AS present,
+            a.method, a.recorded_at
+       FROM persons p
+       LEFT JOIN attendance a  ON a.person_id = p.id AND a.session_id = $1
+       LEFT JOIN groups g      ON g.id = p.home_group_id
+       LEFT JOIN journey_stages js ON js.id = p.journey_stage_id
+      WHERE p.archived_at IS NULL AND NOT p.is_deceased ${filter}
+      ORDER BY (a.id IS NOT NULL) DESC, p.last_name NULLS LAST, p.first_name
+      LIMIT 400`,
+    params);
+  return rows;
+}
+
+/** Headcount for people who were never registered. Every church has them. */
+export async function setUnregistered(tx: Tx, sessionId: string, n: number) {
+  const { rows } = await tx.query(
+    `UPDATE attendance_sessions SET unregistered_count = $2 WHERE id = $1
+     RETURNING unregistered_count`, [sessionId, Math.max(0, n)]);
+  return rows[0] ?? null;
+}
+
+/** Recent sessions, for the attendance history list. */
+export async function recentSessions(tx: Tx, limit = 20) {
+  const { rows } = await tx.query(
+    `SELECT s.id, s.session_date, s.status, s.unregistered_count,
+            sv.name AS service_name,
+            (SELECT count(*)::int FROM attendance WHERE session_id = s.id) AS present
+       FROM attendance_sessions s JOIN services sv ON sv.id = s.service_id
+      ORDER BY s.session_date DESC, sv.position
+      LIMIT $1`, [limit]);
+  return rows;
+}

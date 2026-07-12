@@ -176,6 +176,7 @@ tr.flag:hover{background:#F7DFDF}
     <div class="slab">Data</div>
     <div class="nav"    data-v="duplicates" onclick="go('duplicates')"><i class="ti ti-copy"></i>Duplicates<span id="dBadge"></span></div>
     <div class="nav"    data-v="import"     onclick="go('import')"><i class="ti ti-file-import"></i>Import</div>
+    <div class="nav"    data-v="export"     onclick="go('export')"><i class="ti ti-download"></i>Export</div>
     <div class="who">
       <div class="av" id="pAv">—</div>
       <div style="flex:1;min-width:0">
@@ -234,7 +235,7 @@ async function boot(){
 function head(t,s,a=''){ $('#hTitle').textContent=t; $('#hSub').textContent=s; $('#hActs').innerHTML=a; }
 function go(v){
   document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('on',n.dataset.v===v));
-  ({home:viewHome,members:viewMembers,attendance:viewAtt,duplicates:viewDupes,import:viewImport})[v]();
+  ({home:viewHome,members:viewMembers,attendance:viewAtt,duplicates:viewDupes,import:viewImport,export:viewExport})[v]();
 }
 
 /* ============================== OVERVIEW ============================== */
@@ -338,7 +339,8 @@ async function viewMembers(q=''){
   const d=await api('/api/members?limit=300'+(q?'&q='+encodeURIComponent(q):''));
   const flag=new Set(DUPES.flatMap(x=>[x.person_a.id,x.person_b.id]));
   head('Members', `${d.total} on the roll`,
-    `<button class="btn" onclick="openForm()">Register member</button>`);
+    `<a href="/api/export/members.csv" class="btn btn-o" style="text-decoration:none">Download CSV</a>
+     <button class="btn" onclick="openForm()">Register member</button>`);
   $('#view').innerHTML=`<div class="card">
     <div style="margin-bottom:18px">
       <input id="q" value="${esc(q)}" placeholder="Search by name, phone, or member code"></div>
@@ -446,15 +448,20 @@ async function save(){
 }
 
 /* ============================= ATTENDANCE ============================= */
+let SESS=null;
+
 async function viewAtt(){
-  const [svcs,rows]=await Promise.all([
+  const [svcs,rows,sessions]=await Promise.all([
     api('/api/services').catch(()=>[]),
-    api('/api/attendance/by-service').catch(()=>[])]);
+    api('/api/attendance/by-service').catch(()=>[]),
+    api('/api/attendance/sessions').catch(()=>[])]);
   const total=rows.reduce((a,r)=>a+(r.present||0),0);
   const top=Math.max(0,...rows.map(r=>r.present||0));
   head('Attendance', new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'}),
-    `<a href="/scan.html?church=${encodeURIComponent(CHURCH)}" target="_blank" class="btn"
-       style="text-decoration:none">Open scanner</a>`);
+    `<a href="/api/export/attendance.csv" class="btn btn-o" style="text-decoration:none">Download CSV</a>
+     <a href="/scan.html?church=${encodeURIComponent(CHURCH)}" target="_blank" class="btn"
+        style="text-decoration:none">Open scanner</a>`);
+
   $('#view').innerHTML=`
    <div class="kpis">
      ${rows.map(r=>`<div class="kpi ${r.present===top&&top?'acc':''}">
@@ -466,32 +473,148 @@ async function viewAtt(){
    </div>
 
    <div class="card" style="margin-bottom:16px">
-     <div class="note">
-       <i class="ti ti-device-mobile" style="font-size:30px;color:var(--brand)"></i>
-       <div style="flex:1;min-width:240px">
-         <div class="h" style="font-size:16px;font-weight:500;margin-bottom:4px">
-           The scanner works with no internet</div>
-         <div class="muted" style="line-height:1.75">Open it on an usher's phone. It caches the
-           roster first, then validates every scan on the device. Scans are held on the phone and
-           uploaded when the signal comes back. 3,000 people in 30 minutes is 1.7 scans a second —
-           a round-trip to the server per scan would back the gate up.</div>
-       </div>
-       <a href="/scan.html?church=${encodeURIComponent(CHURCH)}" target="_blank" class="btn"
-          style="text-decoration:none;white-space:nowrap">Open scanner</a>
+     <div class="ch"><i class="ti ti-clipboard-check"></i><h3>Take attendance</h3></div>
+     <div class="muted" style="line-height:1.75;margin-bottom:16px">
+       Open a service, then mark people present by hand, or hand an usher the QR scanner.
+       Both write to the same record. The scanner works with no internet.</div>
+     <div style="display:flex;gap:10px;flex-wrap:wrap">
+       <select id="svcPick" style="max-width:240px">
+         ${svcs.map(v=>`<option value="${v.id}">${esc(v.name)}</option>`).join('')}
+       </select>
+       <button class="btn" onclick="openSheet()">Open mark sheet</button>
      </div>
    </div>
 
    <div class="card">
-     <div class="ch"><i class="ti ti-calendar-event"></i><h3>Services</h3>
-       <span class="r">${svcs.length}</span></div>
-     ${svcs.map((s,i)=>`<div class="li">
-       <div class="g" style="background:${s.kind==='sunday'?'var(--brand)':'#0891B2'}">
-         <i class="ti ti-${s.kind==='sunday'?'building-church':'users-group'}"></i></div>
-       <div style="flex:1"><div style="font-weight:600;color:var(--ink)">${esc(s.name)}</div>
-         <div class="muted">${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][s.day_of_week]||''}
-           ${s.start_time?'· '+String(s.start_time).slice(0,5):''}</div></div>
-       <span class="tag t-n">${esc(s.kind)}</span>
-     </div>`).join('')||'<div class="muted">No services yet. Run migration 005 in Neon.</div>'}
+     <div class="ch"><i class="ti ti-history"></i><h3>Recent services</h3>
+       <span class="r">${sessions.length}</span></div>
+     ${sessions.length?`<table><thead><tr>
+       <th>Date</th><th>Service</th><th>Present</th><th>Unregistered</th><th>Status</th><th></th>
+     </tr></thead><tbody>
+     ${sessions.map(x=>`<tr onclick="loadSheet('${x.id}','${esc(x.service_name)}','${x.session_date}')">
+       <td>${new Date(x.session_date).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</td>
+       <td style="font-weight:600;color:var(--ink)">${esc(x.service_name)}</td>
+       <td class="num" style="color:var(--ink)">${x.present}</td>
+       <td class="muted">${x.unregistered_count||0}</td>
+       <td><span class="tag ${x.status==='open'?'t-g':'t-n'}">${x.status}</span></td>
+       <td><i class="ti ti-pencil" style="color:var(--faint)"></i></td>
+     </tr>`).join('')}</tbody></table>`
+     :'<div class="muted">No services recorded yet.</div>'}
+   </div>`;
+}
+
+async function openSheet(){
+  const sel=$('#svcPick'); if(!sel||!sel.value) return;
+  const s=await api('/api/attendance/session',{method:'POST',
+    body:JSON.stringify({service_id:sel.value})});
+  loadSheet(s.id, sel.selectedOptions[0].textContent, s.session_date);
+}
+
+async function loadSheet(id,name,date,q=''){
+  SESS={id,name,date};
+  const [sheet,state]=await Promise.all([
+    api(`/api/attendance/session/${id}/sheet`+(q?'?q='+encodeURIComponent(q):'')),
+    api(`/api/attendance/session/${id}`)]);
+  const present=sheet.filter(x=>x.present).length;
+
+  head('Mark sheet', `${name} · ${new Date(date).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'})}`,
+    `<button class="btn btn-o" onclick="go('attendance')">Back</button>
+     <a href="/scan.html?church=${encodeURIComponent(CHURCH)}" target="_blank" class="btn"
+        style="text-decoration:none">Scanner</a>`);
+
+  $('#view').innerHTML=`
+   <div class="kpis">
+     <div class="kpi acc"><div class="l">Marked present</div><div class="v" id="nP">${present}</div>
+       <div class="d muted">of ${sheet.length} on the roll</div></div>
+     <div class="kpi"><div class="l">First timers</div><div class="v">${state.first_timers||0}</div>
+       <div class="d muted">Present today</div></div>
+     <div class="kpi warn"><div class="l">Unregistered</div>
+       <div class="v"><input id="unreg" type="number" min="0" value="${state.unregistered_count||0}"
+         style="width:88px;font-family:var(--head);font-size:26px;font-weight:500;padding:2px 6px;
+                border:1px solid var(--line);text-align:center"
+         onchange="setUnreg(this.value)"></div>
+       <div class="d muted">Headcount, not on the roll</div></div>
+     <div class="kpi"><div class="l">Total in the building</div>
+       <div class="v" id="nT">${present+(state.unregistered_count||0)}</div>
+       <div class="d muted">Marked + headcount</div></div>
+   </div>
+
+   <div class="card">
+     <div style="margin-bottom:18px">
+       <input id="sq" value="${esc(q)}" placeholder="Search a name, phone, or member code"></div>
+     <table><thead><tr>
+       <th style="width:70px">Present</th><th>Member</th><th>Group</th><th>Service</th><th>How</th>
+     </tr></thead><tbody>
+     ${sheet.map(x=>`<tr id="r_${x.id}" class="${x.present?'':''}"
+        style="${x.present?'background:var(--good-soft)':''}">
+       <td onclick="toggle('${x.id}',${x.present})" style="cursor:pointer">
+         <div style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;
+              justify-content:center;border:2px solid ${x.present?'var(--good)':'var(--line)'};
+              background:${x.present?'var(--good)':'#fff'}">
+           ${x.present?'<i class="ti ti-check" style="color:#fff;font-size:16px"></i>':''}
+         </div></td>
+       <td onclick="toggle('${x.id}',${x.present})" style="cursor:pointer">
+         <div style="display:flex;align-items:center;gap:12px">
+           <div class="av">${ini(x.name)}</div>
+           <div><div style="font-weight:600;color:var(--ink)">${esc(x.name)}</div>
+             <div class="muted" style="font-size:12px">${esc(x.phone||'no phone')} · ${esc(x.stage_label||'')}</div>
+           </div></div></td>
+       <td class="muted">${esc(x.group_name||'—')}</td>
+       <td class="muted">${esc((x.usual_service||'—').replace(' Service',''))}</td>
+       <td>${x.present?`<span class="tag ${x.method==='qr'?'t-b':'t-n'}">${x.method==='qr'?'scanned':'by hand'}</span>`:''}</td>
+     </tr>`).join('')||'<tr><td colspan="5" class="muted">Nobody found.</td></tr>'}
+     </tbody></table>
+   </div>`;
+
+  const b=$('#sq');
+  b.oninput=e=>{clearTimeout(window._t);
+    window._t=setTimeout(()=>loadSheet(id,name,date,e.target.value),300)};
+  b.focus(); b.setSelectionRange(b.value.length,b.value.length);
+}
+
+async function toggle(personId,isPresent){
+  const row=$('#r_'+personId);
+  if(isPresent){
+    await api(`/api/attendance/session/${SESS.id}/mark/${personId}`,{method:'DELETE'});
+  }else{
+    await api(`/api/attendance/session/${SESS.id}/mark`,{method:'POST',
+      body:JSON.stringify({person_id:personId})});
+  }
+  loadSheet(SESS.id,SESS.name,SESS.date,$('#sq')?$('#sq').value:'');
+}
+async function setUnreg(n){
+  await api(`/api/attendance/session/${SESS.id}/unregistered`,{method:'PUT',
+    body:JSON.stringify({count:Number(n)||0})});
+  const p=Number($('#nP').textContent)||0;
+  $('#nT').textContent=p+(Number(n)||0);
+}
+
+/* =============================== EXPORT ============================== */
+function viewExport(){
+  head('Export','Your data, in your hands');
+  const dl=(f,t,d,i)=>`
+    <div class="li">
+      <div class="g" style="background:var(--brand)"><i class="ti ti-${i}"></i></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;color:var(--ink)">${t}</div>
+        <div class="muted" style="line-height:1.6">${d}</div></div>
+      <a href="/api/export/${f}" class="btn btn-o" style="text-decoration:none;white-space:nowrap">
+        Download</a>
+    </div>`;
+  $('#view').innerHTML=`
+   <div class="card" style="margin-bottom:16px">
+     <div class="muted" style="line-height:1.8">
+       This is <b style="color:var(--ink)">your church's data</b>, and you can take it out at any
+       time. Files open directly in Excel. Every download is recorded in the audit trail —
+       a congregation's phone numbers leaving the building is something a board should be able
+       to see.</div>
+   </div>
+   <div class="card">
+     ${dl('members.csv','Members','Every member with contact details, origin, group, and service. Health data is never exported.','users')}
+     ${dl('attendance.csv','Attendance','One row per person per service. Includes when they were at the gate and when the scanner synced — a church being audited needs both.','qrcode')}
+     ${dl('attendance-summary.csv','Attendance summary','One row per service per date, with the unregistered headcount. This is what a board wants.','chart-bar')}
+     ${dl('groups.csv','Groups','The full hierarchy — headquarters, zone, branch, cell — with member counts.','sitemap')}
+     ${dl('audit.csv','Audit trail','Who did what, and when. Including who looked at whose health record.','shield-check')}
    </div>`;
 }
 
