@@ -198,7 +198,7 @@ tr.flag:hover{background:#F7DFDF}
 <div id="modal"></div>
 
 <script>
-let CHURCH='', ME=null, DUPES=[], MEMBERS=[];
+let CHURCH='', ME=null, DUPES=[], MEMBERS=[], STAGES=[], GROUPS=[], STATES=[];
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ini=n=>(n||'?').split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase();
@@ -229,6 +229,10 @@ async function boot(){
   $('#pName').textContent=ME.tenant.name; $('#pAv').textContent=ini(ME.tenant.name);
   MEMBERS=(await api('/api/members?limit=300')).members;
   DUPES=await api('/api/duplicates').catch(()=>[]);
+  [STAGES,GROUPS,STATES]=await Promise.all([
+    api('/api/stages').catch(()=>[]),
+    api('/api/groups').catch(()=>[]),
+    api('/api/states').catch(()=>[])]);
   $('#dBadge').outerHTML=DUPES.length?`<span class="n" id="dBadge">${DUPES.length}</span>`:'<span id="dBadge"></span>';
   go('home');
 }
@@ -369,13 +373,16 @@ async function openMember(id){
   let h=null; try{h=await api(`/api/members/${id}/health`)}catch(e){}
   const f=(k,v)=>v?`<div class="row"><span class="k">${k}</span><span class="v">${esc(v)}</span></div>`:'';
   const carrier=h&&['AS','SS','AC','SC'].includes(h.genotype);
+  const canHealth=['pastor','admin','owner'].includes(ME.role);
+
   $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
     <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">
       <div class="av" style="width:56px;height:56px;font-size:19px;border-radius:9px">${ini(m.full_name)}</div>
-      <div style="flex:1">
+      <div style="flex:1;min-width:0">
         <div class="h" style="font-size:22px;font-weight:500">${esc(m.full_name)}</div>
         <div class="muted">${esc(m.stage_label||'')} · ${esc(m.home_group_name||'no group')}</div></div>
-      <span class="tag t-n">${esc(m.source||'')}</span></div>
+      <button class="btn" onclick="editMember('${id}')">Edit</button></div>
+
     <div class="sect">Contact</div>
     ${f('Phone',m.phone)}${f('Second phone',m.phone_2)}${f('Email',m.email)}
     ${f('Address',m.address)}${f('Town',m.town)}${f('LGA',m.lga)}
@@ -385,28 +392,174 @@ async function openMember(id){
     <div class="sect">Church</div>
     ${f('Service',m.usual_service)}${f('Post held',m.post_held)}
     ${f('Work or school',m.occupation)}${f('Place of work',m.workplace)}
-    ${h?`<div class="sect">Health — pastor only. This view was logged.</div>
-      <div class="row"><span class="k">Genotype</span>
-        <span class="tag ${carrier?'t-r':'t-g'}">${esc(h.genotype||'—')}</span></div>
-      ${f('Blood group',h.blood_group)}
-      ${carrier?`<div style="background:var(--bad-soft);color:var(--bad);padding:14px 16px;
-        border-radius:9px;font-size:13px;line-height:1.7;margin-top:12px">
-        <b>Carrier.</b> Flag before marriage counselling — AS x AS carries a 1-in-4 risk of a
-        child with sickle cell disease.</div>`:''}`:''}
+    ${f('Registered via',m.source)}
+
+    ${canHealth?`<div class="sect">Health — pastor only. This view was logged.</div>
+      ${h?`<div class="row"><span class="k">Genotype</span>
+            <span class="tag ${carrier?'t-r':'t-g'}">${esc(h.genotype||'—')}</span></div>
+          ${f('Blood group',h.blood_group)}
+          ${carrier?`<div style="background:var(--bad-soft);color:var(--bad);padding:14px 16px;
+            border-radius:9px;font-size:13px;line-height:1.7;margin-top:12px">
+            <b>Carrier.</b> Flag before marriage counselling — AS x AS carries a 1-in-4 risk
+            of a child with sickle cell disease.</div>`:''}`
+        :'<div class="muted">Not recorded.</div>'}
+      <button class="btn btn-o" style="margin-top:14px" onclick="editHealth('${id}')">
+        ${h?'Update':'Record'} genotype</button>`:''}
+
     ${qr?`<div class="sect">QR identity</div>
       <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
         <img alt="QR code" width="110" height="110" style="border-radius:9px;border:1px solid var(--line)"
           src="https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(qr.qr_token)}">
         <div style="flex:1;min-width:200px"><div class="muted" style="line-height:1.75">
-          Scanned at the gate to mark attendance. If it leaks, rotate it — no need to reprint
-          an ID card.</div>
+          Scanned at the gate. If it leaks, rotate it — no need to reprint an ID card.</div>
           <button class="btn btn-o" style="margin-top:12px" onclick="rot('${id}')">Rotate code</button></div>
       </div>`:''}
-    <button class="btn btn-o" style="width:100%;margin-top:28px" onclick="close_()">Close</button>
+
+    <div style="display:flex;gap:12px;margin-top:28px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Close</button>
+      <button class="btn btn-o" style="color:var(--bad);border-color:var(--bad-soft)"
+        onclick="archive('${id}','${esc(m.full_name)}')">Archive</button>
+    </div>
   </div></div>`;
 }
-async function rot(id){await api(`/api/members/${id}/qr/rotate`,{method:'POST'});openMember(id)}
-function close_(){$('#modal').innerHTML=''}
+
+/* ---------------------------- EDIT A MEMBER --------------------------- */
+async function editMember(id){
+  const m=await api('/api/members/'+id);
+  const V=k=>esc(m[k]??'');
+  const t=(n,l,ty='text')=>`<div class="field"><label>${l}</label>
+    <input id="e_${n}" type="${ty}" value="${ty==='date'?(m[n]||'').slice(0,10):V(n)}"></div>`;
+  const sel=(n,l,opts,cur)=>`<div class="field"><label>${l}</label><select id="e_${n}">
+    <option value="">—</option>
+    ${opts.map(o=>`<option value="${esc(o.v)}" ${o.v===cur?'selected':''}>${esc(o.t)}</option>`).join('')}
+  </select></div>`;
+
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div class="h" style="font-size:22px;font-weight:500">Edit ${esc(m.full_name)}</div>
+    <div class="muted" style="margin-bottom:26px">
+      Phone numbers are cleaned on save. Changing the stage is recorded in this member's history.</div>
+    <div id="eerr"></div>
+
+    <div class="sect">Name</div>
+    <div class="g3">${t('first_name','First name')}${t('middle_name','Other name')}${t('last_name','Surname')}</div>
+
+    <div class="sect">Contact</div>
+    <div class="gg2">${t('phone','Phone 1')}${t('phone_2','Phone 2')}</div>${t('email','Email','email')}
+
+    <div class="sect">Origin</div>
+    <div class="gg2">
+      ${sel('state_of_origin','State of origin',
+        STATES.map(x=>({v:x.name,t:x.name})), m.state_of_origin)}
+      ${t('lga_of_origin','LGA of origin')}
+    </div>
+
+    <div class="sect">Residence</div>${t('address','Address')}
+    <div class="gg2">${t('town','Town')}${t('lga','LGA')}</div>
+
+    <div class="sect">Details</div>
+    <div class="gg2">
+      ${sel('gender','Gender',[{v:'male',t:'Male'},{v:'female',t:'Female'}], m.gender)}
+      ${t('date_of_birth','Date of birth','date')}
+    </div>
+    <div class="gg2">
+      ${sel('marital_status','Marital status',
+        [{v:'single',t:'Single'},{v:'married',t:'Married'},{v:'widowed',t:'Widowed'},
+         {v:'divorced',t:'Divorced'}], m.marital_status)}
+      ${t('occupation','Work or school')}
+    </div>
+    ${t('workplace','Place of work or school')}
+
+    <div class="sect">Church</div>
+    <div class="gg2">
+      ${sel('journey_stage_id','Stage',
+        STAGES.map(x=>({v:x.id,t:x.label})), m.journey_stage_id)}
+      ${sel('home_group_id','Group',
+        GROUPS.map(x=>({v:x.id,t:'  '.repeat(x.depth)+x.name+' ('+x.group_type+')'})), m.home_group_id)}
+    </div>
+    <div class="gg2">
+      ${sel('usual_service','Service',
+        [{v:'1st Service',t:'1st Service'},{v:'2nd Service',t:'2nd Service'},
+         {v:'3rd Service',t:'3rd Service'}], m.usual_service)}
+      ${t('post_held','Post held')}
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:28px">
+      <button class="btn btn-o" style="flex:1" onclick="openMember('${id}')">Cancel</button>
+      <button class="btn" style="flex:2" onclick="saveEdit('${id}')">Save changes</button>
+    </div>
+  </div></div>`;
+}
+
+async function saveEdit(id){
+  const ks=['first_name','middle_name','last_name','phone','phone_2','email',
+    'state_of_origin','lga_of_origin','address','town','lga','gender','date_of_birth',
+    'marital_status','occupation','workplace','journey_stage_id','home_group_id',
+    'usual_service','post_held'];
+  const b={};
+  // Send every field, including blanks — clearing a wrong phone number must
+  // actually clear it, not silently keep the old value.
+  ks.forEach(k=>{ const el=$('#e_'+k); if(el) b[k]=el.value.trim()||null; });
+  if(!b.first_name){$('#eerr').innerHTML='<div class="err">A first name is required.</div>';return}
+  try{
+    await api('/api/members/'+id,{method:'PATCH',body:JSON.stringify(b)});
+    await boot(); go('members'); openMember(id);
+  }catch(e){ $('#eerr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
+}
+
+/* -------------------------- HEALTH (pastor only) ---------------------- */
+async function editHealth(id){
+  let h=null; try{h=await api(`/api/members/${id}/health`)}catch(e){}
+  const o=(v,c)=>`<option value="${v}" ${v===c?'selected':''}>${v}</option>`;
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div class="h" style="font-size:22px;font-weight:500">Genotype and blood group</div>
+    <div class="muted" style="line-height:1.8;margin-bottom:22px">
+      This is health data. It is stored separately, visible only to pastors and admins, and
+      <b style="color:var(--ink)">every time anyone reads it, that is logged</b>.
+      It cannot be saved without the member's consent.</div>
+    <div id="herr"></div>
+    <div class="gg2">
+      <div class="field"><label>Genotype</label><select id="h_g">
+        <option value="">—</option>
+        ${['AA','AS','SS','AC','SC','CC'].map(v=>o(v,h&&h.genotype)).join('')}
+      </select></div>
+      <div class="field"><label>Blood group</label><select id="h_b">
+        <option value="">—</option>
+        ${['O+','O-','A+','A-','B+','B-','AB+','AB-'].map(v=>o(v,h&&h.blood_group)).join('')}
+      </select></div>
+    </div>
+    <div style="background:var(--brand-wash);border:1px solid var(--brand-soft);border-radius:9px;
+         padding:16px;display:flex;gap:12px;align-items:flex-start">
+      <input type="checkbox" id="h_c" ${h&&h.consent_given?'checked':''}
+        style="width:18px;height:18px;margin-top:2px;flex-shrink:0">
+      <label for="h_c" style="text-transform:none;letter-spacing:0;font-weight:400;
+        color:var(--body);font-size:13px;line-height:1.7;margin:0;cursor:pointer">
+        This member gave their consent for the church to hold their genotype and blood group.
+        Required under NDPR — health data cannot be stored on an assumption.</label>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:28px">
+      <button class="btn btn-o" style="flex:1" onclick="openMember('${id}')">Cancel</button>
+      <button class="btn" style="flex:2" onclick="saveHealth('${id}')">Save</button>
+    </div>
+  </div></div>`;
+}
+async function saveHealth(id){
+  const b={genotype:$('#h_g').value||null, blood_group:$('#h_b').value||null,
+           consent_given:$('#h_c').checked};
+  if(!b.consent_given){
+    $('#herr').innerHTML='<div class="err">Consent is required. Health data cannot be stored without it.</div>';
+    return;
+  }
+  try{ await api(`/api/members/${id}/health`,{method:'PUT',body:JSON.stringify(b)}); openMember(id); }
+  catch(e){ $('#herr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
+}
+
+/* ------------------------------- ARCHIVE ------------------------------ */
+async function archive(id,name){
+  if(!confirm(`Archive ${name}?\n\nThey disappear from the roll and from billing, but nothing is `
+    +`destroyed — their giving history, attendance, and records are all kept. This can be undone.`))return;
+  try{ await api('/api/members/'+id,{method:'DELETE'}); close_(); await boot(); go('members'); }
+  catch(e){ alert(e.message) }
+}
 
 function openForm(){
   const t=(n,l,ty='text')=>`<div class="field"><label>${l}</label><input id="f_${n}" type="${ty}"></div>`;

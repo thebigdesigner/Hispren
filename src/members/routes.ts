@@ -13,6 +13,11 @@ export function registerMemberRoutes(app: FastifyInstance) {
   const staff = { preHandler: [authenticate, requireRole("staff")] };
   const pastor = { preHandler: [authenticate, requireRole("pastor")] };
 
+  // ---- lookups for the edit form ------------------------------------------
+  app.get("/api/stages", auth, async (req) => tenantTx(req, (tx) => svc.listStages(tx)));
+  app.get("/api/groups", auth, async (req) => tenantTx(req, (tx) => svc.listGroups(tx)));
+  app.get("/api/states", auth, async (req) => tenantTx(req, (tx) => svc.listStates(tx)));
+
   // ---- list / search -----------------------------------------------------
   app.get<{ Querystring: svc.MemberQuery }>("/api/members", auth, async (req) =>
     tenantTx(req, (tx) => svc.listMembers(tx, {

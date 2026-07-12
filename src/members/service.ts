@@ -460,3 +460,37 @@ export async function dismissDuplicate(tx: Tx, id: string, actorId: string) {
       WHERE id = $1 RETURNING id`, [id, actorId]);
   return rows[0] ?? null;
 }
+
+
+// ---------------------------------------------------------------------------
+// Lookups for the edit form
+// ---------------------------------------------------------------------------
+export async function listStages(tx: Tx) {
+  const { rows } = await tx.query(
+    `SELECT id, key, label, position FROM journey_stages ORDER BY position`);
+  return rows;
+}
+
+/** The recursive hierarchy, flattened with an indent so a <select> can show it. */
+export async function listGroups(tx: Tx) {
+  const { rows } = await tx.query(`
+    WITH RECURSIVE tree AS (
+      SELECT id, parent_id, name, group_type, 0 AS depth, name::text AS path
+        FROM groups WHERE parent_id IS NULL AND archived_at IS NULL
+      UNION ALL
+      SELECT g.id, g.parent_id, g.name, g.group_type, t.depth + 1,
+             t.path || ' / ' || g.name
+        FROM groups g JOIN tree t ON g.parent_id = t.id
+       WHERE g.archived_at IS NULL
+    )
+    SELECT id, name, group_type, depth, path,
+           (SELECT count(*)::int FROM persons p
+             WHERE p.home_group_id = tree.id AND p.archived_at IS NULL) AS members
+      FROM tree ORDER BY path`);
+  return rows;
+}
+
+export async function listStates(tx: Tx) {
+  const { rows } = await tx.query(`SELECT code, name FROM ng_states ORDER BY name`);
+  return rows;
+}
