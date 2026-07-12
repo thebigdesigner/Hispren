@@ -1,0 +1,29 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_DB: hispren, POSTGRES_USER: hispren_owner, POSTGRES_PASSWORD: ci }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+    env:
+      MIGRATION_DATABASE_URL: postgres://hispren_owner:ci@localhost:5432/hispren
+      DATABASE_URL: postgres://hispren_app:dev_app_pw@localhost:5432/hispren
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm ci || npm install
+      - run: npm run migrate
+      # THE GATE: isolation suite blocks every merge
+      - run: npm run test:isolation
+      - run: npm test
