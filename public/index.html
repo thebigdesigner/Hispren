@@ -76,11 +76,15 @@ label{display:block;font-family:var(--head);font-size:12px;font-weight:600;color
   font-size:21px;font-weight:700}
 
 #app{display:none}
-.wrap{display:flex;min-height:100vh}
+.wrap{display:flex;min-height:100vh;align-items:stretch}
 
 /* Sidebar: near-black, like the Termii console. */
 .side{width:236px;flex-shrink:0;background:var(--shell);padding:22px 14px;
-  display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+  display:flex;flex-direction:column;position:sticky;top:0;
+  height:100vh;overflow-y:auto}
+/* If the nav ever outgrows the viewport it scrolls inside the black, rather
+   than spilling nav items onto the white page. */
+.side::-webkit-scrollbar{width:0}
 .brand{display:flex;align-items:center;gap:11px;padding:0 8px 26px}
 .brand .t{font-family:var(--head);font-size:19px;font-weight:700;color:#fff}
 .slab{font-family:var(--head);font-size:11px;font-weight:600;color:#5A6070;letter-spacing:.1em;
