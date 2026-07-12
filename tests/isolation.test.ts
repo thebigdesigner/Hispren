@@ -45,8 +45,8 @@ beforeAll(async () => {
   [A, B] = [t.rows[0].id, t.rows[1].id];
 
   const p = await asTenant(A, (q) =>
-    q(`INSERT INTO persons (tenant_id, first_name, last_name, phone)
-       VALUES (current_tenant_id(), 'Amaka', 'Okafor', '+2348012345678')
+    q(`INSERT INTO persons (tenant_id, first_name, last_name, phone, date_of_birth)
+       VALUES (current_tenant_id(), 'Amaka', 'Okafor', '+2348012345678', '1990-03-14')
        RETURNING id`)
   );
   personA = p.rows[0].id;
@@ -152,5 +152,37 @@ describe("outbox events carry tenant isolation", () => {
       q(`SELECT * FROM event_outbox WHERE event_type = 'test.event'`)
     );
     expect(r.rows).toHaveLength(0);
+  });
+});
+
+describe("schema guarantees", () => {
+  it("group hierarchy rejects cycles", async () => {
+    const g = await asTenant(A, (q) => q(
+      `INSERT INTO groups (tenant_id, group_type, name)
+       VALUES (current_tenant_id(),'branch','Cycle Test') RETURNING id`));
+    const child = await asTenant(A, (q) => q(
+      `INSERT INTO groups (tenant_id, parent_id, group_type, name)
+       VALUES (current_tenant_id(),$1,'cell','Child') RETURNING id`, [g.rows[0].id]));
+    await expect(
+      asTenant(A, (q) => q(`UPDATE groups SET parent_id=$1 WHERE id=$2`,
+        [child.rows[0].id, g.rows[0].id]))
+    ).rejects.toThrow(/cycle/i);
+  });
+
+  it("credit wallet cannot go negative", async () => {
+    await admin.query(
+      `INSERT INTO credit_wallets (tenant_id, credit_type, balance)
+       VALUES ($1,'sms',100) ON CONFLICT DO NOTHING`, [A]);
+    await expect(
+      admin.query(`UPDATE credit_wallets SET balance = balance - 500
+                    WHERE tenant_id=$1 AND credit_type='sms'`, [A])
+    ).rejects.toThrow(/check constraint/i);
+  });
+
+  it("birthday columns are generated correctly", async () => {
+    const r = await asTenant(A, (q) => q(
+      `SELECT dob_month, dob_day FROM persons WHERE id = $1`, [personA]));
+    expect(r.rows[0].dob_month).toBe(3);
+    expect(r.rows[0].dob_day).toBe(14);
   });
 });

@@ -156,8 +156,12 @@ CREATE TABLE persons (
   last_name        text,
   gender           text CHECK (gender IN ('male','female')),
   date_of_birth    date,
-  dob_month_day    text GENERATED ALWAYS AS
-                     (to_char(date_of_birth,'MM-DD')) STORED, -- birthday trigger scans
+  -- Birthday triggers scan these. to_char() is NOT immutable (depends on
+  -- DateStyle) so it cannot back a generated column; EXTRACT is immutable.
+  dob_month        smallint GENERATED ALWAYS AS
+                     (EXTRACT(MONTH FROM date_of_birth)::smallint) STORED,
+  dob_day          smallint GENERATED ALWAYS AS
+                     (EXTRACT(DAY FROM date_of_birth)::smallint) STORED,
   phone            text,                             -- E.164 normalised in app
   email            citext,
   photo_url        text,
@@ -182,7 +186,7 @@ CREATE TABLE persons (
 CREATE INDEX idx_persons_tenant          ON persons(tenant_id);
 CREATE INDEX idx_persons_tenant_stage    ON persons(tenant_id, journey_stage_id);
 CREATE INDEX idx_persons_tenant_household ON persons(tenant_id, household_id);
-CREATE INDEX idx_persons_tenant_dob      ON persons(tenant_id, dob_month_day);
+CREATE INDEX idx_persons_tenant_dob      ON persons(tenant_id, dob_month, dob_day);
 CREATE INDEX idx_persons_tenant_billable ON persons(tenant_id) WHERE is_billable;
 CREATE INDEX idx_persons_name_trgm       ON persons
   USING gin ((first_name || ' ' || coalesce(last_name,'')) gin_trgm_ops); -- dup detection

@@ -27,7 +27,11 @@ export function buildServer() {
     reply.code(500).send({ error: "internal", ref: req.id });
   });
 
-  app.get("/healthz", async () => ({ ok: await healthcheck() }));
+  app.get("/healthz", async (_req, reply) => {
+    const h = await healthcheck();
+    const ok = h.app && h.platform;
+    return reply.code(ok ? 200 : 503).send({ ok, ...h });
+  });
 
   // ---- auth ----
   app.post<{ Body: { email: string; password: string } }>(

@@ -7,7 +7,8 @@
     "worker": "tsx src/worker.ts",
     "migrate": "node scripts/migrate.js",
     "test": "vitest run",
-    "test:isolation": "vitest run tests/isolation.test.ts"
+    "test:isolation": "vitest run tests/isolation.test.ts",
+    "smoke": "node scripts/smoke.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.600.0",
@@ -18,7 +19,8 @@
     "fastify": "^4.28.0",
     "ioredis": "^5.4.1",
     "pg": "^8.12.0",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "tsx": "^4.16.0",
