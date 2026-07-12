@@ -40,12 +40,6 @@ export function registerCareRoutes(app: FastifyInstance) {
   });
 
   // ---- households ---------------------------------------------------------
-  app.post<{ Body: { name: string; address?: string } }>(
-    "/api/households", staff, async (req, reply) => {
-      const h = await tenantTx(req, (tx) =>
-        c.createHousehold(tx, req.body.name, req.body.address));
-      reply.code(201).send(h);
-    });
 
   // ---- the users a task can be assigned to --------------------------------
   app.get("/api/users", auth, async (req) =>
