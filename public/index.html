@@ -1942,18 +1942,57 @@ async function viewMessages(){
        rather than pretending the message went out.</div>
    </div>` : ''}
 
+   <div class="card" style="margin-bottom:16px;border-left:3px solid var(--brand)">
+     <div class="ch"><i class="ti ti-mail" style="color:var(--brand)"></i>
+       <h3>Email costs nothing. Use it first.</h3></div>
+     <div class="muted" style="line-height:1.85;margin-bottom:16px">
+       One message to <b style="color:var(--ink)">${st.total}</b> members costs about
+       <b style="color:var(--ink)">NGN ${(st.total*4.5).toLocaleString()}</b> by SMS.
+       By email it costs <b style="color:var(--ink)">nothing</b> — no DND register,
+       no 160-character tax, no 8pm cutoff.<br><br>
+       <b style="color:var(--ink)">${st.with_email}</b> of your members have an email address.
+       Hispren sends to them by email and pays for SMS only for the
+       <b style="color:var(--ink)">${st.sms_only}</b> who do not. That is the difference between
+       <b style="color:var(--ink)">NGN ${(st.total*4.5).toLocaleString()}</b> and
+       <b style="color:var(--ink)">NGN ${(st.sms_only*4.5).toLocaleString()}</b> for the same message.
+       ${st.unreachable?`<br><br><b style="color:var(--bad)">${st.unreachable}</b> members have
+         neither. They cannot be reached at all — get a phone number or an email from them.`:''}
+     </div>
+     <div style="display:flex;gap:8px;flex-wrap:wrap">
+       <div style="flex:1;min-width:120px;border:1px solid var(--line);border-radius:9px;padding:14px">
+         <div class="muted" style="font-size:11px;font-weight:600;letter-spacing:.06em;
+           text-transform:uppercase;font-family:var(--head)">Free (email)</div>
+         <div class="num" style="font-size:26px;color:var(--brand-dk)">${st.with_email}</div>
+       </div>
+       <div style="flex:1;min-width:120px;border:1px solid var(--line);border-radius:9px;padding:14px">
+         <div class="muted" style="font-size:11px;font-weight:600;letter-spacing:.06em;
+           text-transform:uppercase;font-family:var(--head)">Paid (SMS)</div>
+         <div class="num" style="font-size:26px;color:var(--warn-dk)">${st.sms_only}</div>
+       </div>
+       <div style="flex:1;min-width:120px;border:1px solid var(--line);border-radius:9px;padding:14px">
+         <div class="muted" style="font-size:11px;font-weight:600;letter-spacing:.06em;
+           text-transform:uppercase;font-family:var(--head)">Unreachable</div>
+         <div class="num" style="font-size:26px;color:${st.unreachable?'var(--bad)':'var(--muted)'}">
+           ${st.unreachable}</div>
+       </div>
+     </div>
+   </div>
+
    <div class="kpis">
      <div class="kpi ${st.sender_id?'acc':'bad'}"><div class="l">Sender ID</div>
-       <div class="v" style="font-size:20px;padding-top:8px">${esc(st.sender_id||'none')}</div>
-       <div class="d muted">What members see</div></div>
+       <div class="v" style="font-size:19px;padding-top:9px">${esc(st.sender_id||'none')}</div>
+       <div class="d muted">SMS only</div></div>
      <div class="kpi ${st.dnd_route?'acc':'bad'}"><div class="l">DND route</div>
-       <div class="v" style="font-size:20px;padding-top:8px">${st.dnd_route?'Active':'Not approved'}</div>
-       <div class="d" style="color:${st.dnd_route?'var(--good)':'var(--bad)'}">
+       <div class="v" style="font-size:19px;padding-top:9px">${st.dnd_route?'Active':'Not approved'}</div>
+       <div class="d" style="color:${st.dnd_route?'var(--good-dk)':'var(--bad-dk)'}">
          ${st.dnd_route?'Reaches everyone':'DND numbers unreachable'}</div></div>
+     <div class="kpi ${st.email_live?'acc':'warn'}"><div class="l">Email</div>
+       <div class="v" style="font-size:19px;padding-top:9px">
+         ${st.email_live?esc(st.email_provider):'Dry run'}</div>
+       <div class="d muted">${st.email_live?'Sending':'Set RESEND_API_KEY'}</div></div>
      <div class="kpi"><div class="l">SMS credit</div>
        <div class="v">${Number(st.sms_balance).toLocaleString()}</div>
        <div class="d muted">Pages, not messages</div></div>
-     <div class="kpi"><div class="l">Campaigns</div><div class="v">${camps.length}</div></div>
    </div>
 
    <div class="card">
@@ -2047,10 +2086,25 @@ function compose(){
     <div id="merr"></div>
     <div class="field"><label>Name this campaign</label>
       <input id="m_name" placeholder="Sunday reminder"></div>
+
+    <div class="field"><label>How to send it</label>
+      <select id="m_ch" onchange="chanChange()">
+        <option value="cascade" selected>Email where possible, SMS for the rest — cheapest</option>
+        <option value="email">Email only — free</option>
+        <option value="sms">SMS only — everyone gets a text</option>
+      </select>
+      <div class="muted" style="margin-top:7px;line-height:1.65" id="m_chnote">
+        Members with an email address get an email, which costs nothing.
+        Only the ones without pay for an SMS.</div>
+    </div>
+
+    <div class="field" id="m_subjF" style="display:none">
+      <label>Subject</label><input id="m_subj" placeholder="A word from your church"></div>
+
     <div class="field"><label>Start from a template</label>
       <select id="m_t" onchange="useTemplate()">
         <option value="">— write my own —</option>
-        ${T.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}
+        ${T.map(t=>`<option value="${t.id}" data-ch="${t.channel}">${esc(t.name)} (${t.channel})</option>`).join('')}
       </select></div>
     <div class="field"><label>Message</label>
       <textarea id="m_body" rows="4" oninput="recount()"
@@ -2071,14 +2125,49 @@ function compose(){
   </div></div>`;
 }
 
+function chanChange(){
+  const c=$('#m_ch').value;
+  const email = c!=='sms';
+  $('#m_subjF').style.display = (c==='email'||c==='cascade') ? '' : 'none';
+  $('#m_chnote').innerHTML =
+    c==='email' ? 'Free. No character limit, no DND register, no time window. '
+                + 'Members without an email address get nothing — check the numbers above.'
+  : c==='sms'  ? 'Every member with a phone gets a text. This is the expensive option, '
+                + 'and DND-registered numbers may not be reached at all.'
+  : 'Members with an email address get an email, which costs nothing. '
+    + 'Only the ones without pay for an SMS.';
+  recount();
+}
+
 function useTemplate(){
+  const opt=$('#m_t').selectedOptions[0];
   const t=(window._T||[]).find(x=>x.id===$('#m_t').value);
-  if(t){ $('#m_body').value=t.body; if(!$('#m_name').value) $('#m_name').value=t.name; recount(); }
+  if(!t) return;
+  $('#m_body').value=t.body;
+  if(!$('#m_name').value) $('#m_name').value=t.name;
+  if(t.subject) $('#m_subj').value=t.subject;
+  // an email template in an SMS campaign is 900 characters of pain
+  if(t.channel==='email'&&$('#m_ch').value==='sms'){ $('#m_ch').value='cascade'; }
+  chanChange();
 }
 
 async function recount(){
   const body=$('#m_body').value;
+  const chEl=$('#m_ch');
   if(!body){ $('#m_count').innerHTML=''; return; }
+
+  // Email has no page count and no cost. Counting characters would be a lie
+  // that pushes a pastor to write less than he means to.
+  if(chEl && chEl.value==='email'){
+    $('#m_count').innerHTML=`<div style="background:var(--brand-wash);
+      border:1px solid var(--brand-soft);border-radius:9px;padding:14px;
+      display:flex;justify-content:space-between;align-items:center">
+      <div><div style="font-weight:600;color:var(--ink);font-size:13px">Email</div>
+        <div class="muted">No character limit. Write what you mean.</div></div>
+      <div class="num" style="font-size:22px;color:var(--brand-dk)">Free</div></div>`;
+    return;
+  }
+
   const c=await api('/api/notify/count',{method:'POST',body:JSON.stringify({body})});
   const r=c.raw, n=c.normalised;
   const overpaying = r.units > n.units;
@@ -2119,7 +2208,10 @@ async function doPrepare(){
   if(!body){$('#merr').innerHTML='<div class="err">Write something first.</div>';return}
   try{
     PREP=await api('/api/notify/prepare',{method:'POST',
-      body:JSON.stringify({name, body, template_id:$('#m_t').value||undefined})});
+      body:JSON.stringify({name, body,
+        channel: $('#m_ch') ? $('#m_ch').value : 'cascade',
+        subject: $('#m_subj') ? $('#m_subj').value.trim() : undefined,
+        template_id:$('#m_t').value||undefined})});
     showPrepare();
   }catch(e){ $('#merr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
 }
@@ -2132,13 +2224,26 @@ function showPrepare(){
     <div class="muted" style="margin-bottom:24px">Nothing has left yet.</div>
 
     <div class="kpis" style="margin-bottom:20px">
-      <div class="kpi acc"><div class="l">Will be sent</div><div class="v">${p.queued}</div></div>
-      <div class="kpi ${p.suppressed?'warn':''}"><div class="l">Will not</div>
+      <div class="kpi acc"><div class="l">By email — free</div><div class="v">${p.by_email||0}</div></div>
+      <div class="kpi warn"><div class="l">By SMS — paid</div><div class="v">${p.by_sms||0}</div></div>
+      <div class="kpi ${p.suppressed?'bad':''}"><div class="l">Will not be sent</div>
         <div class="v">${p.suppressed}</div></div>
-      <div class="kpi"><div class="l">SMS pages</div><div class="v">${p.units}</div></div>
       <div class="kpi"><div class="l">Cost</div>
-        <div class="v" style="font-size:22px;padding-top:6px">NGN ${cost.toLocaleString()}</div></div>
+        <div class="v" style="font-size:22px;padding-top:6px">NGN ${cost.toLocaleString()}</div>
+        <div class="d muted">${p.units} SMS page${p.units===1?'':'s'}</div></div>
     </div>
+
+    ${p.by_email && p.sms_only_units > p.units ? `
+      <div style="background:var(--brand-soft);border:1px solid var(--brand);border-radius:9px;
+           padding:16px;margin-bottom:20px;display:flex;align-items:center;gap:14px">
+        <i class="ti ti-coin" style="font-size:26px;color:var(--brand-dk)"></i>
+        <div style="line-height:1.7;font-size:13px;color:var(--brand-deep)">
+          <b>You are saving NGN ${((p.sms_only_units - p.units)*4.5).toLocaleString()}.</b>
+          By SMS alone this message would have cost
+          NGN ${(p.sms_only_units*4.5).toLocaleString()}. ${p.by_email} member${p.by_email===1?'':'s'}
+          ${p.by_email===1?'is':'are'} getting it by email instead, and will never know the difference.
+        </div>
+      </div>` : ''}
 
     <div class="sect">This is what they will receive</div>
     <div style="background:var(--brand-wash);border:1px solid var(--brand-soft);border-radius:9px;
@@ -2187,10 +2292,11 @@ async function openCampaign(id,name){
     <div class="muted" style="margin-bottom:22px;line-height:1.75">
       Every message, <b style="color:var(--ink)">including the ones we refused to send.</b>
       When someone says "I never got it", the answer is here.</div>
-    <table><thead><tr><th>Member</th><th>Number</th><th>Status</th><th>Why</th></tr></thead>
+    <table><thead><tr><th>Member</th><th>Sent to</th><th>Channel</th><th>Status</th><th>Why</th></tr></thead>
     <tbody>${msgs.map(m=>`<tr>
       <td style="font-weight:600;color:var(--ink)">${esc(m.name||'—')}</td>
       <td class="muted">${esc(m.to_address)}</td>
+      <td><span class="tag ${m.channel==='email'?'t-g':'t-b'}">${esc(m.channel||'sms')}</span></td>
       <td><span class="tag ${m.status==='suppressed'?'t-r':
         m.status==='failed'?'t-r':m.status==='sent'?'t-g':'t-n'}">${esc(m.status)}</span></td>
       <td class="muted" style="font-size:12px">${

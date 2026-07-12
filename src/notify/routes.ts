@@ -3,6 +3,7 @@ import { authenticate, requireRole, tenantTx } from "../platform/auth";
 import * as n from "./service";
 import { count, toGsm7, render } from "./gsm";
 import { provider } from "./providers";
+import { emailProvider } from "./providers/email";
 
 export function registerNotifyRoutes(app: FastifyInstance) {
   const auth  = { preHandler: [authenticate] };
@@ -55,11 +56,14 @@ export function registerNotifyRoutes(app: FastifyInstance) {
     });
 
   /** Compose. Nothing is sent — this shows the pastor exactly what WILL happen. */
-  app.post<{ Body: { name: string; body: string; person_ids?: string[];
+  app.post<{ Body: { name: string; body: string; subject?: string;
+                     channel?: "sms" | "email" | "cascade";
+                     person_ids?: string[];
                      template_id?: string; ignore_quiet_hours?: boolean } }>(
     "/api/notify/prepare", staff, async (req) =>
       tenantTx(req, (tx) => n.prepare(tx, {
         name: req.body.name, body: req.body.body,
+        subject: req.body.subject, channel: req.body.channel,
         personIds: req.body.person_ids, templateId: req.body.template_id ?? null,
         userId: req.auth!.userId, ignoreQuietHours: req.body.ignore_quiet_hours,
       })));
@@ -104,12 +108,29 @@ export function registerNotifyRoutes(app: FastifyInstance) {
       const w = await tx.query(
         `SELECT balance FROM credit_wallets
           WHERE tenant_id = current_tenant_id() AND credit_type = 'sms'`);
+      // How many members can we reach for free? This is the number that
+      // decides whether a church can afford to communicate at all.
+      const reach = await tx.query(`
+        SELECT count(*) FILTER (WHERE email IS NOT NULL) AS with_email,
+               count(*) FILTER (WHERE email IS NULL
+                                AND coalesce(phone, phone_2) IS NOT NULL) AS sms_only,
+               count(*) FILTER (WHERE email IS NULL
+                                AND phone IS NULL AND phone_2 IS NULL) AS unreachable,
+               count(*) AS total
+          FROM persons WHERE archived_at IS NULL AND NOT is_deceased`);
+
       return {
         provider: provider().name,
         live: provider().name !== "dry-run",
         sender_id: s.id,
         dnd_route: s.dnd,
         sms_balance: w.rows[0] ? Number(w.rows[0].balance) : 0,
+        email_provider: emailProvider().name,
+        email_live: emailProvider().name !== "dry-run",
+        with_email:  Number(reach.rows[0].with_email),
+        sms_only:    Number(reach.rows[0].sms_only),
+        unreachable: Number(reach.rows[0].unreachable),
+        total:       Number(reach.rows[0].total),
       };
     }));
 

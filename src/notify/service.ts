@@ -16,6 +16,7 @@ import { Tx, platformQuery } from "../platform/db";
 import { publish } from "../platform/outbox";
 import { count, render, toGsm7 } from "./gsm";
 import { provider } from "./providers";
+import { emailProvider, renderEmail } from "./providers/email";
 
 const QUIET_START = 21;   // 21:00 WAT
 const QUIET_END = 7;      // 07:00 WAT
@@ -28,9 +29,24 @@ export type Suppression =
 export type Candidate = {
   person_id: string; name: string; first_name: string;
   phone: string | null; phone_2: string | null;
-  is_deceased: boolean; consent: boolean; suppressed: boolean;
+  email: string | null;
+  is_deceased: boolean;
+  consent: boolean;        // SMS
+  email_consent: boolean;
+  suppressed: boolean;     // SMS
+  email_suppressed: boolean;
   recent: number; is_dnd: boolean | null;
 };
+
+/**
+ * THE CHANNEL CASCADE.
+ *
+ * Email first, SMS only for the people who have no email. That single rule is
+ * the difference between NGN 8,244 and NGN 3,000 for one message to 1,832
+ * members — and it costs the church nothing to adopt, because the member gets
+ * the message either way.
+ */
+export type Channel = "sms" | "email" | "cascade";
 
 /**
  * Everyone, with every fact the suppression layer needs, in ONE query.
@@ -42,14 +58,18 @@ export async function candidates(tx: Tx, personIds?: string[]): Promise<Candidat
     `SELECT p.id AS person_id,
             trim(coalesce(p.first_name,'')||' '||coalesce(p.last_name,'')) AS name,
             coalesce(p.first_name,'') AS first_name,
-            p.phone, p.phone_2, p.is_deceased,
-            coalesce(c.status,'granted') <> 'revoked' AS consent,
+            p.phone, p.phone_2, p.email, p.is_deceased,
+            coalesce(c.status,'granted')  <> 'revoked' AS consent,
+            coalesce(ce.status,'granted') <> 'revoked' AS email_consent,
             EXISTS (SELECT 1 FROM suppressions s
                      WHERE s.address IN (p.phone, p.phone_2) AND s.channel='sms') AS suppressed,
+            EXISTS (SELECT 1 FROM suppressions s
+                     WHERE s.address = p.email::text AND s.channel='email') AS email_suppressed,
             messages_in_window(p.id, 7) AS recent,
             d.is_dnd
        FROM persons p
        LEFT JOIN consents c   ON c.person_id = p.id AND c.channel = 'sms'
+       LEFT JOIN consents ce  ON ce.person_id = p.id AND ce.channel = 'email'
        LEFT JOIN dnd_status d ON d.phone = coalesce(p.phone, p.phone_2)
       WHERE p.archived_at IS NULL ${filter}`,
     personIds && personIds.length ? [personIds] : []);
@@ -62,11 +82,35 @@ export async function candidates(tx: Tx, personIds?: string[]): Promise<Candidat
  */
 export function decide(
   c: Candidate,
-  opts: { hasDndRoute: boolean; now?: Date; ignoreQuietHours?: boolean }
-): { send: boolean; reason?: Suppression; to?: string; route?: "generic" | "dnd" } {
+  opts: { hasDndRoute: boolean; channel?: Channel; now?: Date; ignoreQuietHours?: boolean }
+): { send: boolean; reason?: Suppression; to?: string;
+     channel?: "sms" | "email"; route?: "generic" | "dnd" | "email" } {
 
-  // A "we missed you!" text to someone who died last week is damage no feature repays.
+  // A "we missed you!" message to someone who died last week is damage no
+  // feature repays. This is checked before ANY channel.
   if (c.is_deceased) return { send: false, reason: "deceased" };
+
+  const want = opts.channel ?? "cascade";
+
+  // ---- EMAIL ----------------------------------------------------------
+  // Free, no DND, no character tax, no time window. Where a member has an
+  // email address, this is the correct channel and SMS is a waste of money.
+  const emailOk = !!c.email && c.email_consent && !c.email_suppressed;
+
+  if (want === "email") {
+    if (!c.email) return { send: false, reason: "no_number" };
+    if (!c.email_consent) return { send: false, reason: "consent" };
+    if (c.email_suppressed) return { send: false, reason: "bounced" };
+    return { send: true, to: c.email, channel: "email", route: "email" };
+  }
+
+  if (want === "cascade" && emailOk) {
+    return { send: true, to: c.email!, channel: "email", route: "email" };
+  }
+
+  // ---- SMS ------------------------------------------------------------
+  // Falls through to here when: SMS was asked for explicitly, or the cascade
+  // found no usable email address.
 
   // NDPR. Not a preference — a lawful basis.
   if (!c.consent) return { send: false, reason: "consent" };
@@ -92,14 +136,15 @@ export function decide(
   // unreachable by SMS, and the church needs to know that.
   if (c.is_dnd) {
     if (!opts.hasDndRoute) return { send: false, reason: "dnd_no_route" };
-    return { send: true, to, route: "dnd" };   // the DND route has no time limit
+    return { send: true, to, channel: "sms", route: "dnd" };  // no time limit
   }
 
   // On the generic route this is not our policy — it is MTN's. They refuse
   // delivery 8pm–8am. Sending anyway means it silently vanishes.
   if (quiet && !opts.ignoreQuietHours) return { send: false, reason: "quiet_hours" };
 
-  return { send: true, to, route: opts.hasDndRoute ? "dnd" : "generic" };
+  return { send: true, to, channel: "sms",
+           route: opts.hasDndRoute ? "dnd" : "generic" };
 }
 
 export async function senderFor(tx: Tx): Promise<{ id: string | null; dnd: boolean }> {
@@ -117,11 +162,13 @@ export async function senderFor(tx: Tx): Promise<{ id: string | null; dnd: boole
  */
 export async function prepare(
   tx: Tx,
-  opts: { name: string; body: string; personIds?: string[]; userId: string;
+  opts: { name: string; body: string; subject?: string; channel?: Channel;
+          personIds?: string[]; userId: string;
           templateId?: string | null; ignoreQuietHours?: boolean }
 ) {
   const sender = await senderFor(tx);
   const people = await candidates(tx, opts.personIds);
+  const channel: Channel = opts.channel ?? "cascade";
   const t = await tx.query(
     `SELECT name, sms_opt_out_text FROM tenants WHERE id = current_tenant_id()`);
   const church = t.rows[0]?.name ?? "";
@@ -129,26 +176,38 @@ export async function prepare(
 
   // Normalise BEFORE counting. One curly apostrophe from Word turns a
   // 160-character message into a 70-character one and doubles the bill.
-  let body = toGsm7(opts.body);
+  const clean = toGsm7(opts.body);
 
-  // The NCC requires an opt-out instruction at the END of every message.
-  // Appended HERE, at the send layer — an admin must not be able to forget it,
-  // and must not be able to remove it. It is counted, so the cost is honest.
-  if (optOut && !/\bSTOP\b/i.test(body)) body = body.trimEnd() + " " + optOut;
+  // The NCC requires an opt-out instruction at the end of every SMS. Appended
+  // HERE, at the send layer — an admin cannot forget it and cannot remove it.
+  // It is counted, so the page count the pastor sees is the truth.
+  //
+  // Email does NOT get it: the HTML footer carries its own, and "Reply STOP"
+  // in an email is nonsense.
+  const smsBody = (optOut && !/\bSTOP\b/i.test(clean))
+    ? clean.trimEnd() + " " + optOut
+    : clean;
+  const body = smsBody;   // campaigns store the SMS form; email strips it back off
 
   const camp = await tx.query(
-    `INSERT INTO campaigns (tenant_id, name, body, template_id, created_by, status)
-     VALUES (current_tenant_id(), $1, $2, $3, $4, 'draft') RETURNING id`,
-    [opts.name, body, opts.templateId ?? null, opts.userId]);
+    `INSERT INTO campaigns (tenant_id, name, channel, body, template_id, created_by, status)
+     VALUES (current_tenant_id(), $1, $2, $3, $4, $5, 'draft') RETURNING id`,
+    [opts.name, channel === "cascade" ? "sms" : channel, body,
+     opts.templateId ?? null, opts.userId]);
   const campaignId = camp.rows[0].id;
 
-  let queued = 0, suppressed = 0, units = 0;
+  const subject = opts.subject?.trim() || church;
+
+  let bySms = 0, byEmail = 0, suppressed = 0, units = 0;
   const reasons: Record<string, number> = {};
 
   for (const p of people) {
-    const rendered = render(body, { first_name: p.first_name, church, name: p.name });
+    const vars = { first_name: p.first_name, church, name: p.name };
+    const rendered = render(smsBody, vars);
+    const emailBody = render(clean, vars);     // no "Reply STOP" in an email
     const k = count(rendered);
-    const d = decide(p, { hasDndRoute: sender.dnd, ignoreQuietHours: opts.ignoreQuietHours });
+    const d = decide(p, { hasDndRoute: sender.dnd, channel,
+                          ignoreQuietHours: opts.ignoreQuietHours });
 
     if (!d.send) {
       suppressed++;
@@ -156,31 +215,57 @@ export async function prepare(
       await tx.query(
         `INSERT INTO messages (tenant_id, campaign_id, person_id, channel, to_address,
            body, units, encoding, status, suppressed_by)
-         VALUES (current_tenant_id(),$1,$2,'sms',$3,$4,$5,$6,'suppressed',$7)`,
-        [campaignId, p.person_id, p.phone || p.phone_2 || '-', rendered,
+         VALUES (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,'suppressed',$8)`,
+        [campaignId, p.person_id, channel === "email" ? "email" : "sms",
+         p.email || p.phone || p.phone_2 || '-', rendered,
          k.units, k.encoding, d.reason]);
       continue;
     }
 
-    queued++; units += k.units;
-    await tx.query(
-      `INSERT INTO messages (tenant_id, campaign_id, person_id, channel, to_address,
-         sender_id, body, units, encoding, route, status)
-       VALUES (current_tenant_id(),$1,$2,'sms',$3,$4,$5,$6,$7,$8,'queued')`,
-      [campaignId, p.person_id, d.to, sender.id, rendered, k.units, k.encoding, d.route]);
+    if (d.channel === "email") {
+      byEmail++;
+      await tx.query(
+        `INSERT INTO messages (tenant_id, campaign_id, person_id, channel, to_address,
+           sender_id, body, units, encoding, route, status)
+         VALUES (current_tenant_id(),$1,$2,'email',$3,$4,$5,1,'GSM7','email','queued')`,
+        [campaignId, p.person_id, d.to, subject, emailBody]);
+    } else {
+      bySms++;
+      units += k.units;   // only SMS costs units
+      await tx.query(
+        `INSERT INTO messages (tenant_id, campaign_id, person_id, channel, to_address,
+           sender_id, body, units, encoding, route, status)
+         VALUES (current_tenant_id(),$1,$2,'sms',$3,$4,$5,$6,$7,$8,'queued')`,
+        [campaignId, p.person_id, d.to, sender.id, rendered,
+         k.units, k.encoding, d.route]);
+    }
   }
 
+  const queued = bySms + byEmail;
   await tx.query(
     `UPDATE campaigns SET recipients=$2, suppressed=$3, queued=$4, units=$5 WHERE id=$1`,
     [campaignId, people.length, suppressed, queued, units]);
 
+  // What the church would have paid on SMS alone — this is the number that
+  // makes the cascade obvious, and it belongs in front of the pastor.
+  const smsOnlyUnits = people
+    .filter(p => decide(p, { hasDndRoute: sender.dnd, channel: "sms",
+                             ignoreQuietHours: opts.ignoreQuietHours }).send)
+    .reduce((n, p) => n + count(render(body,
+      { first_name: p.first_name, church, name: p.name })).units, 0);
+
   return {
     campaign_id: campaignId,
+    channel,
     sender_id: sender.id,
     has_dnd_route: sender.dnd,
     recipients: people.length,
     queued, suppressed, units, reasons,
+    by_sms: bySms,
+    by_email: byEmail,
+    sms_only_units: smsOnlyUnits,        // the counterfactual
     counted: count(render(body, { first_name: "Chinedu", church })),
+    subject,
     sample: render(body, { first_name: people[0]?.first_name ?? "Chinedu", church }),
   };
 }
@@ -229,19 +314,37 @@ export async function dispatch(tx: Tx, campaignId: string, unitPrice = 4.5) {
 // WORKER SIDE — drains the queue across every tenant
 // ---------------------------------------------------------------------------
 export async function drainQueue(batch = 50) {
-  const p = provider();
+  const sms = provider();
+  const mail = emailProvider();
+  const from = process.env.EMAIL_FROM ?? "Hispren <onboarding@resend.dev>";
+
   const { rows } = await platformQuery<any>(
-    `SELECT id, to_address, sender_id, body, route FROM messages
-      WHERE status = 'queued' ORDER BY queued_at LIMIT $1`, [batch]);
+    `SELECT m.id, m.channel, m.to_address, m.sender_id, m.body, m.route,
+            t.name AS church, t.brand_color
+       FROM messages m JOIN tenants t ON t.id = m.tenant_id
+      WHERE m.status = 'queued' ORDER BY m.queued_at LIMIT $1`, [batch]);
 
   for (const m of rows) {
-    const r = await p.send(m.to_address, m.sender_id ?? "Hispren", m.body,
-                           (m.route ?? "generic") as any);
+    let ok = false, providerId: string | undefined, error: string | undefined;
+    let providerName: string;
+
+    if (m.channel === "email") {
+      // sender_id carries the subject for an email row
+      const { html, text } = renderEmail(m.church, m.body, m.brand_color || "#00C389");
+      const r = await mail.send(m.to_address, from, m.sender_id || m.church, html, text);
+      ok = r.ok; providerId = r.providerId; error = r.error;
+      providerName = mail.name;
+    } else {
+      const r = await sms.send(m.to_address, m.sender_id ?? "Hispren", m.body,
+                               (m.route ?? "generic") as any);
+      ok = r.ok; providerId = r.providerId; error = r.error;
+      providerName = sms.name;
+    }
+
     await platformQuery(
-      `UPDATE messages SET status=$2, provider=$3, provider_id=$4, error=$5,
-              cost=coalesce($6, cost), sent_at=now() WHERE id=$1`,
-      [m.id, r.ok ? "sent" : "failed", p.name, r.providerId ?? null,
-       r.error ?? null, r.cost ?? null]);
+      `UPDATE messages SET status=$2, provider=$3, provider_id=$4, error=$5, sent_at=now()
+        WHERE id=$1`,
+      [m.id, ok ? "sent" : "failed", providerName, providerId ?? null, error ?? null]);
   }
   return rows.length;
 }

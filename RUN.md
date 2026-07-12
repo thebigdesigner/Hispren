@@ -14,7 +14,8 @@
 | 8 | `006_groups_events_reports.sql` | recursive groups, calendar, reports |
 | 9 | `007_notifications.sql` | messages, templates, suppression, DND cache |
 | 10 | `05_seed_church.sql` | Dominion Chapel + login |
-| 11 | `08_go_live.sql` | SMS credit, templates, services |
+| 11 | `008_optout_email.sql` | mandatory opt-out line + email templates |
+| 12 | `08_go_live.sql` | SMS credit, templates, services |
 
 *(Already run some? They're idempotent. Re-running is safe.)*
 
@@ -37,8 +38,18 @@ Variables:
 **Never `MIGRATION_DATABASE_URL`.** That's the owner role, and RLS does not apply
 to table owners. If the running app holds it, every isolation policy is bypassed.
 
-Redis and `TERMII_API_KEY` are optional. Without them the API still runs — the
-worker is off, and SMS is in dry-run.
+Optional:
+
+    REDIS_URL         worker only (reminders + the send queue)
+    TERMII_API_KEY    live SMS.   Without it: dry run.
+    RESEND_API_KEY    live email. Without it: dry run.
+    EMAIL_FROM        e.g. "Dominion Chapel <hello@yourdomain.com>"
+
+**Get RESEND_API_KEY first.** Free tier, no telco paperwork, no DND register,
+no 160-character tax. A 1,832-member church sending one weekly reminder pays
+**NGN 8,244 by SMS or NGN 2,826 by cascade** — NGN 281,736 a year, saved, for
+the same message. Email is not a nice-to-have. It is how a Nigerian church can
+afford to communicate at all.
 
 ---
 
