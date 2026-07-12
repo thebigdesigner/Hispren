@@ -201,6 +201,11 @@ export async function prepare(
   let bySms = 0, byEmail = 0, suppressed = 0, units = 0;
   const reasons: Record<string, number> = {};
 
+  // WHO. Not a count — the actual names. Nobody presses "Send to 3" without
+  // being told which three.
+  const willGet: Array<{ id: string; name: string; to: string; channel: string }> = [];
+  const willNot: Array<{ id: string; name: string; reason: string }> = [];
+
   for (const p of people) {
     const vars = { first_name: p.first_name, church, name: p.name };
     const rendered = render(smsBody, vars);
@@ -212,6 +217,7 @@ export async function prepare(
     if (!d.send) {
       suppressed++;
       reasons[d.reason!] = (reasons[d.reason!] ?? 0) + 1;
+      willNot.push({ id: p.person_id, name: p.name, reason: d.reason! });
       await tx.query(
         `INSERT INTO messages (tenant_id, campaign_id, person_id, channel, to_address,
            body, units, encoding, status, suppressed_by)
@@ -221,6 +227,8 @@ export async function prepare(
          k.units, k.encoding, d.reason]);
       continue;
     }
+
+    willGet.push({ id: p.person_id, name: p.name, to: d.to!, channel: d.channel! });
 
     if (d.channel === "email") {
       byEmail++;
@@ -263,6 +271,8 @@ export async function prepare(
     queued, suppressed, units, reasons,
     by_sms: bySms,
     by_email: byEmail,
+    will_get: willGet,     // the actual people
+    will_not: willNot,     // and the actual people who will not
     sms_only_units: smsOnlyUnits,        // the counterfactual
     counted: count(render(body, { first_name: "Chinedu", church })),
     subject,

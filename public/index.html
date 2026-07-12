@@ -197,6 +197,7 @@ tr.flag:hover{background:#FBDFDF}
     <div class="slab">Church</div>
     <div class="nav on" data-v="home"       onclick="go('home')"><i class="ti ti-layout-dashboard"></i>Overview</div>
     <div class="nav"    data-v="members"    onclick="go('members')"><i class="ti ti-users"></i>Members</div>
+    <div class="nav"    data-v="lists"      onclick="go('lists')"><i class="ti ti-list-check"></i>Lists</div>
     <div class="nav"    data-v="attendance" onclick="go('attendance')"><i class="ti ti-qrcode"></i>Attendance</div>
     <div class="nav"    data-v="groups"     onclick="go('groups')"><i class="ti ti-sitemap"></i>Groups</div>
     <div class="nav"    data-v="calendar"   onclick="go('calendar')"><i class="ti ti-calendar"></i>Calendar</div>
@@ -393,6 +394,8 @@ async function viewMembers(q=''){
   $('#view').innerHTML=`<div class="card">
     <div style="display:flex;gap:10px;margin-bottom:18px;align-items:center">
       <input id="q" value="${esc(q)}" placeholder="Search by name, phone, or member code">
+      <button class="btn btn-o" id="saveSel" style="display:none;white-space:nowrap"
+        onclick="saveAsList()">Save as list</button>
       <button class="btn" id="msgSel" style="display:none;white-space:nowrap"
         onclick="messageSelected()">Message 0</button>
     </div>
@@ -421,21 +424,27 @@ async function viewMembers(q=''){
 
 /* Tick several members, message exactly them. */
 let SEL=new Set();
-function toggleSel(id,on){
-  on ? SEL.add(id) : SEL.delete(id);
-  const b=$('#msgSel');
-  b.style.display = SEL.size ? '' : 'none';
-  b.textContent = `Message ${SEL.size}`;
+function paintSel(){
+  const b=$('#msgSel'), s=$('#saveSel');
+  if(b){ b.style.display = SEL.size?'':'none'; b.textContent = `Message ${SEL.size}`; }
+  if(s){ s.style.display = SEL.size?'':'none'; }
 }
+function toggleSel(id,on){ on ? SEL.add(id) : SEL.delete(id); paintSel(); }
 function selectAll(el){
   SEL = new Set();
   document.querySelectorAll('.rowsel').forEach(c=>{
     c.checked = el.checked;
     if(el.checked) SEL.add(c.value);
   });
-  const b=$('#msgSel');
-  b.style.display = SEL.size ? '' : 'none';
-  b.textContent = `Message ${SEL.size}`;
+  paintSel();
+}
+async function saveAsList(){
+  if(!SEL.size) return;
+  const name=prompt(`Name this list of ${SEL.size}:`);
+  if(!name) return;
+  await api('/api/lists',{method:'POST',
+    body:JSON.stringify({name, person_ids:[...SEL]})});
+  go('lists');
 }
 function messageSelected(){
   if(!SEL.size) return;
@@ -2173,16 +2182,176 @@ function mailLink(e){
 }
 
 function compose(){
-  const T = window._T || [];
+  window._filters = window._scope
+    ? { person_ids: window._scope.ids }
+    : {};
+  audienceStep();
+}
+
+/* ══════════════════ STEP 1 — WHO ══════════════════
+ * A count is not an audience. "Send to 3" tells a pastor nothing — WHICH three?
+ * Every review of every ChMS names the same killer feature: send from the
+ * database, filtering by criteria, and SEE the list before you pay for it.
+ */
+async function audienceStep(){
+  const F = window._filters || {};
   const sc = window._scope;
+
+  $('#modal').innerHTML = `<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div class="h" style="font-size:22px;font-weight:500">Who is this for?</div>
+    <div class="muted" style="margin-bottom:22px;line-height:1.7">
+      ${sc ? `Starting from <b style="color:var(--ink)">${esc(sc.label)}</b>. `
+           : 'Filter the congregation, then look at exactly who you are about to reach.'}
+    </div>
+
+    ${sc ? '' : `
+    <div class="sect">Filter</div>
+    <div class="gg2">
+      <div class="field"><label>Stage</label><select id="a_stage" onchange="reAudience()">
+        <option value="">Everyone</option>
+        ${STAGES.map(x=>`<option value="${x.key}" ${x.key===F.stage?'selected':''}>${esc(x.label)}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Group</label><select id="a_group" onchange="reAudience()">
+        <option value="">Any group</option>
+        ${GROUPS.map(x=>`<option value="${x.id}" ${x.id===F.group_id?'selected':''}>
+          ${'&nbsp;'.repeat(x.depth*3)}${esc(x.name)}</option>`).join('')}
+      </select></div>
+    </div>
+    <div class="gg2">
+      <div class="field"><label>Service</label><select id="a_svc" onchange="reAudience()">
+        <option value="">Any service</option>
+        <option ${F.service==='1st Service'?'selected':''}>1st Service</option>
+        <option ${F.service==='2nd Service'?'selected':''}>2nd Service</option>
+        <option ${F.service==='3rd Service'?'selected':''}>3rd Service</option>
+      </select></div>
+      <div class="field"><label>Search a name</label>
+        <input id="a_q" value="${esc(F.q||'')}" oninput="reAudienceSoon()" placeholder="Okonkwo"></div>
+    </div>
+    <div class="sect">Quick picks</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
+      <button class="btn btn-o" style="padding:8px 14px;font-size:12px"
+        onclick="quick({stage:'first_timer'})">First timers</button>
+      <button class="btn btn-o" style="padding:8px 14px;font-size:12px"
+        onclick="quick({at_risk_weeks:3})">At risk (3+ weeks away)</button>
+      <button class="btn btn-o" style="padding:8px 14px;font-size:12px"
+        onclick="quick({never_attended:true})">Never attended</button>
+      <button class="btn btn-o" style="padding:8px 14px;font-size:12px"
+        onclick="quick({no_group:true})">In no group</button>
+      <button class="btn btn-o" style="padding:8px 14px;font-size:12px"
+        onclick="quick({})">Everyone</button>
+    </div>`}
+
+    <div id="a_result" class="muted">Loading…</div>
+
+    <div style="display:flex;gap:12px;margin-top:24px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
+      <button class="btn" style="flex:2" id="a_next" onclick="writeStep()" disabled
+        style="opacity:.4">Next — write the message</button>
+    </div>
+  </div></div>`;
+  reAudience();
+}
+
+function quick(f){ window._filters = f; audienceStep(); }
+function reAudienceSoon(){ clearTimeout(window._at); window._at=setTimeout(reAudience,300); }
+
+async function reAudience(){
+  const sc = window._scope;
+  const F = sc ? { person_ids: sc.ids } : {
+    stage:    $('#a_stage') ? ($('#a_stage').value||undefined) : (window._filters||{}).stage,
+    group_id: $('#a_group') ? ($('#a_group').value||undefined) : (window._filters||{}).group_id,
+    service:  $('#a_svc')   ? ($('#a_svc').value||undefined)   : (window._filters||{}).service,
+    q:        $('#a_q')     ? ($('#a_q').value.trim()||undefined) : undefined,
+    ...(window._filters||{}),
+  };
+  window._filters = F;
+
+  const r = await api('/api/notify/audience',{method:'POST',body:JSON.stringify(F)});
+  window._aud = r;
+  AUD = new Set(r.people.filter(p=>p.reach!=='none').map(p=>p.id));
+
+  const el = $('#a_result'); if(!el) return;
+  el.innerHTML = `
+    <div class="kpis" style="margin-bottom:16px">
+      <div class="kpi acc"><div class="l">By email — free</div><div class="v">${r.by_email}</div></div>
+      <div class="kpi warn"><div class="l">By SMS — paid</div><div class="v">${r.by_sms}</div></div>
+      <div class="kpi ${r.unreachable?'bad':''}"><div class="l">Cannot reach</div>
+        <div class="v">${r.unreachable}</div></div>
+    </div>
+
+    ${r.total ? `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-family:var(--head);font-size:12px;font-weight:700;color:var(--muted);
+        letter-spacing:.06em;text-transform:uppercase">
+        ${r.total} ${r.total===1?'person':'people'} — untick anyone you want to skip</div>
+      <button class="btn btn-o" style="padding:5px 11px;font-size:12px"
+        onclick="audAll()">Toggle all</button>
+    </div>
+    <div style="max-height:280px;overflow-y:auto;border:1px solid var(--line);border-radius:9px">
+      ${r.people.map(p=>`
+        <div style="display:flex;align-items:center;gap:11px;padding:10px 13px;
+             border-bottom:1px solid var(--line2);
+             ${p.reach==='none'?'opacity:.45':''}">
+          <input type="checkbox" class="audsel" value="${p.id}"
+            ${p.reach!=='none'?'checked':'disabled'}
+            onchange="audTick('${p.id}',this.checked)">
+          <div class="av" style="width:28px;height:28px;font-size:11px">${ini(p.name)}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;color:var(--ink);font-size:13px">${esc(p.name)}</div>
+            <div class="muted" style="font-size:12px;font-family:var(--mono)">
+              ${esc(p.email || p.phone || p.phone_2 || 'no contact')}</div>
+          </div>
+          ${p.reach==='email' ? '<span class="tag t-g">Email · free</span>'
+          : p.reach==='sms'   ? '<span class="tag t-w">SMS · paid</span>'
+          : `<span class="tag t-r" title="${esc(p.why||'')}">${esc(p.why||'Cannot reach')}</span>`}
+        </div>`).join('')}
+    </div>` : '<div class="card muted">Nobody matches. Widen the filter.</div>'}`;
+
+  const nx = $('#a_next');
+  if(nx){
+    nx.disabled = !AUD.size;
+    nx.style.opacity = AUD.size ? '1' : '.4';
+    nx.textContent = AUD.size ? `Next — write to ${AUD.size}` : 'Nobody to write to';
+  }
+}
+
+let AUD = new Set();
+function audTick(id,on){
+  on ? AUD.add(id) : AUD.delete(id);
+  const nx=$('#a_next');
+  nx.disabled=!AUD.size; nx.style.opacity=AUD.size?'1':'.4';
+  nx.textContent = AUD.size ? `Next — write to ${AUD.size}` : 'Nobody to write to';
+}
+function audAll(){
+  const boxes=[...document.querySelectorAll('.audsel:not(:disabled)')];
+  const allOn = boxes.every(b=>b.checked);
+  AUD = new Set();
+  boxes.forEach(b=>{ b.checked=!allOn; if(!allOn) AUD.add(b.value); });
+  const nx=$('#a_next');
+  nx.disabled=!AUD.size; nx.style.opacity=AUD.size?'1':'.4';
+  nx.textContent = AUD.size ? `Next — write to ${AUD.size}` : 'Nobody to write to';
+}
+
+/* ══════════════════ STEP 2 — WHAT ══════════════════ */
+function writeStep(){
+  const T = window._T || [];
+  const n = AUD.size;
+  const aud = window._aud || { by_email:0, by_sms:0 };
+  const chosen = (aud.people||[]).filter(p=>AUD.has(p.id));
+  const em = chosen.filter(p=>p.reach==='email').length;
+  const sm = chosen.filter(p=>p.reach==='sms').length;
+
   $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
-    <div class="h" style="font-size:22px;font-weight:500">
-      ${sc ? 'Message '+esc(sc.label) : 'Message everyone'}</div>
-    <div class="muted" style="margin-bottom:24px;line-height:1.75">
-      ${sc ? `<b style="color:var(--ink)">${sc.ids.length}</b> ${sc.ids.length===1?'person':'people'}. `
-           : 'The whole congregation. '}
-      Nothing is sent until you see exactly who it reaches — and who it does not.</div>
+    <div class="h" style="font-size:22px;font-weight:500">What do you want to say?</div>
+    <div class="muted" style="margin-bottom:22px;line-height:1.7">
+      To <b style="color:var(--ink)">${n}</b> ${n===1?'person':'people'} —
+      <b style="color:var(--brand-dk)">${em} by email (free)</b>,
+      <b style="color:var(--warn-dk)">${sm} by SMS</b>.
+      <span onclick="audienceStep()" style="color:var(--brand-dk);cursor:pointer;
+        text-decoration:underline">change who</span>
+    </div>
     <div id="merr"></div>
+
     <div class="field"><label>Name this campaign</label>
       <input id="m_name" placeholder="Sunday reminder"></div>
 
@@ -2205,32 +2374,32 @@ function compose(){
         <option value="">— write my own —</option>
         ${T.map(t=>`<option value="${t.id}" data-ch="${t.channel}">${esc(t.name)} (${t.channel})</option>`).join('')}
       </select></div>
+
     <div class="field"><label>Message</label>
       <textarea id="m_body" rows="4" oninput="recount()"
         style="font-family:var(--text);font-size:14px;padding:12px;border:1px solid var(--line);
                border-radius:8px;width:100%;resize:vertical"
         placeholder="Hello {{first_name}}, ..."></textarea>
-      <div class="muted" style="margin-top:6px;line-height:1.7">
+      <div class="muted" style="margin-top:6px">
         Merge fields: <b style="color:var(--ink)">{{first_name}}</b>
-        <b style="color:var(--ink)">{{church}}</b><br>
-        <b style="color:var(--ink)">Reply STOP to opt out.</b> is added automatically —
-        the NCC requires it, and it is counted below.</div>
+        <b style="color:var(--ink)">{{church}}</b></div>
     </div>
     <div id="m_count"></div>
+
     <div style="display:flex;gap:12px;margin-top:24px">
-      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
-      <button class="btn" style="flex:2" onclick="doPrepare()">See who this reaches</button>
+      <button class="btn btn-o" style="flex:1" onclick="audienceStep()">Back</button>
+      <button class="btn" style="flex:2" onclick="doPrepare()">See what happens</button>
     </div>
   </div></div>`;
+  chanChange();
 }
 
 function chanChange(){
   const c=$('#m_ch').value;
-  const email = c!=='sms';
   $('#m_subjF').style.display = (c==='email'||c==='cascade') ? '' : 'none';
   $('#m_chnote').innerHTML =
     c==='email' ? 'Free. No character limit, no DND register, no time window. '
-                + 'Members without an email address get nothing — check the numbers above.'
+                + 'Members without an email address get nothing.'
   : c==='sms'  ? 'Every member with a phone gets a text. This is the expensive option, '
                 + 'and DND-registered numbers may not be reached at all.'
   : 'Members with an email address get an email, which costs nothing. '
@@ -2239,14 +2408,13 @@ function chanChange(){
 }
 
 function useTemplate(){
-  const opt=$('#m_t').selectedOptions[0];
   const t=(window._T||[]).find(x=>x.id===$('#m_t').value);
   if(!t) return;
   $('#m_body').value=t.body;
   if(!$('#m_name').value) $('#m_name').value=t.name;
-  if(t.subject) $('#m_subj').value=t.subject;
-  // an email template in an SMS campaign is 900 characters of pain
-  if(t.channel==='email'&&$('#m_ch').value==='sms'){ $('#m_ch').value='cascade'; }
+  if(t.subject && $('#m_subj')) $('#m_subj').value=t.subject;
+  // an email template sent as SMS is 900 characters of pain
+  if(t.channel==='email' && $('#m_ch').value==='sms'){ $('#m_ch').value='cascade'; }
   chanChange();
 }
 
@@ -2306,12 +2474,11 @@ async function doPrepare(){
   const body=$('#m_body').value.trim();
   if(!body){$('#merr').innerHTML='<div class="err">Write something first.</div>';return}
   try{
-    const sc = window._scope;
     PREP=await api('/api/notify/prepare',{method:'POST',
       body:JSON.stringify({name, body,
         channel: $('#m_ch') ? $('#m_ch').value : 'cascade',
         subject: $('#m_subj') ? $('#m_subj').value.trim() : undefined,
-        person_ids: sc ? sc.ids : undefined,
+        person_ids: [...AUD],          // exactly the people he ticked
         template_id:$('#m_t').value||undefined})});
     showPrepare();
   }catch(e){ $('#merr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
@@ -2346,6 +2513,24 @@ function showPrepare(){
         </div>
       </div>` : ''}
 
+    <div class="sect">Who will get this — ${p.will_get.length}</div>
+    <div style="max-height:220px;overflow-y:auto;border:1px solid var(--line);
+         border-radius:9px;margin-bottom:8px">
+      ${p.will_get.length ? p.will_get.map(x=>`
+        <div style="display:flex;align-items:center;gap:11px;padding:10px 14px;
+             border-bottom:1px solid var(--line2)">
+          <div class="av" style="width:28px;height:28px;font-size:11px">${ini(x.name)}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;color:var(--ink);font-size:13px">${esc(x.name)}</div>
+            <div class="muted" style="font-family:var(--mono);font-size:12px">${esc(x.to)}</div>
+          </div>
+          <span class="tag ${x.channel==='email'?'t-g':'t-b'}">${x.channel}</span>
+        </div>`).join('')
+      : '<div class="muted" style="padding:16px">Nobody.</div>'}
+    </div>
+    <div class="muted" style="margin-bottom:22px">
+      Every name here will receive it. Nobody else will.</div>
+
     <div class="sect">This is what they will receive</div>
     <div style="background:var(--brand-wash);border:1px solid var(--brand-soft);border-radius:9px;
          padding:16px;font-size:14px;line-height:1.7;white-space:pre-wrap">${esc(p.sample)}</div>
@@ -2359,18 +2544,25 @@ function showPrepare(){
              register it under Messages. The email half will still go out.`}
     </div>
 
-    ${p.suppressed?`<div class="sect">Who this will NOT reach, and why</div>
+    ${p.suppressed?`<div class="sect">Who this will NOT reach — ${p.suppressed}</div>
       ${Object.entries(p.reasons).map(([k,n])=>{
         const [t,d]=SUPPRESS_REASON[k]||[k,''];
-        return `<div class="li">
-          <div class="g" style="background:${k==='dnd_no_route'||k==='consent'||k==='deceased'
-            ?'var(--bad)':'var(--warn)'}">
-            <i class="ti ti-${k==='consent'?'ban':k==='deceased'?'cross':
-              k==='dnd_no_route'?'phone-off':k==='quiet_hours'?'clock-off':'alert-triangle'}"></i></div>
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:600;color:var(--ink)">${t}</div>
-            <div class="muted" style="line-height:1.65">${d}</div></div>
-          <div class="num" style="font-size:20px">${n}</div>
+        const who=p.will_not.filter(x=>x.reason===k);
+        return `<div style="border:1px solid var(--line);border-radius:9px;margin-bottom:10px">
+          <div class="li" style="padding:12px 14px;border-top:none">
+            <div class="g" style="background:${k==='dnd_no_route'||k==='consent'||k==='deceased'
+              ?'var(--bad)':'var(--warn)'}">
+              <i class="ti ti-${k==='consent'?'ban':k==='deceased'?'cross':
+                k==='dnd_no_route'?'phone-off':k==='quiet_hours'?'clock-off':'alert-triangle'}"></i></div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;color:var(--ink)">${t}</div>
+              <div class="muted" style="line-height:1.65">${d}</div></div>
+            <div class="num" style="font-size:20px">${n}</div>
+          </div>
+          <div style="padding:0 14px 12px 60px;display:flex;gap:6px;flex-wrap:wrap">
+            ${who.slice(0,12).map(x=>`<span class="tag t-n">${esc(x.name)}</span>`).join('')}
+            ${who.length>12?`<span class="muted">and ${who.length-12} more</span>`:''}
+          </div>
         </div>`;}).join('')}`:''}
 
     <div style="display:flex;gap:12px;margin-top:28px">
@@ -2443,6 +2635,121 @@ async function openCampaign(id,name){
     </tr>`).join('')}</tbody></table>
     <button class="btn btn-o" style="width:100%;margin-top:24px" onclick="close_()">Close</button>
   </div></div>`;
+}
+
+
+/* ================================ LISTS ============================== */
+async function viewLists(){
+  const [smart, saved] = await Promise.all([
+    api('/api/lists/smart').catch(()=>[]),
+    api('/api/lists').catch(()=>[])]);
+  head('Lists', `${smart.length} smart · ${saved.length} saved`);
+  $('#view').innerHTML=`
+   <div class="card" style="margin-bottom:16px">
+     <div class="ch"><i class="ti ti-bolt"></i><h3>Smart lists</h3>
+       <span class="r">answered fresh, every time</span></div>
+     <div class="muted" style="line-height:1.8;margin-bottom:16px">
+       These are not lists you maintain — they are <b style="color:var(--ink)">questions</b>,
+       answered the moment you open them. A hand-kept list of at-risk members is accurate for
+       about a week, and then it is wrong and worse than nothing.</div>
+     ${smart.map(s=>`<div class="li">
+       <div class="g" style="background:${
+         s.key==='at_risk'||s.key==='unreachable'?'var(--bad)':
+         s.key==='first_timers'?'var(--warn)':'var(--brand)'}">
+         <i class="ti ti-${
+           s.key==='first_timers'?'user-plus':s.key==='at_risk'?'alert-triangle':
+           s.key==='never_attended'?'user-question':s.key==='no_group'?'users-minus':
+           s.key==='unreachable'?'phone-off':s.key==='no_email'?'mail-off':
+           s.key==='birthdays_this_month'?'cake':s.key==='opted_out'?'ban':'users'}"></i></div>
+       <div style="flex:1;min-width:0">
+         <div style="font-weight:600;color:var(--ink)">${esc(s.label)}</div>
+         ${s.why?`<div class="muted" style="line-height:1.6">${esc(s.why)}</div>`:''}</div>
+       <div class="num" style="font-size:22px;min-width:44px;text-align:right">${s.people}</div>
+       ${s.people?`<button class="btn btn-o" style="padding:7px 13px;font-size:13px"
+         onclick="openSmart('${s.key}','${esc(s.label)}')">Open</button>
+       <button class="btn" style="padding:7px 13px;font-size:13px"
+         onclick="msgSmart('${s.key}','${esc(s.label)}')">Message</button>`
+       :'<span class="muted" style="width:120px;text-align:right">nobody</span>'}
+     </div>`).join('')}
+   </div>
+
+   <div class="card">
+     <div class="ch"><i class="ti ti-bookmark"></i><h3>Saved lists</h3>
+       <span class="r">${saved.length}</span></div>
+     <div class="muted" style="line-height:1.8;margin-bottom:16px">
+       People you picked by hand. Tick members on the Members screen and press
+       <b style="color:var(--ink)">Save as list</b>.
+       "Ushers", "Choir alto", "Baptism class 2026".</div>
+     ${saved.length?saved.map(l=>`<div class="li">
+       <div class="g" style="background:var(--brand)"><i class="ti ti-bookmark"></i></div>
+       <div style="flex:1;min-width:0">
+         <div style="font-weight:600;color:var(--ink)">${esc(l.name)}</div>
+         <div class="muted">${l.people} ${l.people===1?'person':'people'}</div></div>
+       ${l.people?`<button class="btn btn-o" style="padding:7px 13px;font-size:13px"
+         onclick="openList('${l.id}','${esc(l.name)}')">Open</button>
+       <button class="btn" style="padding:7px 13px;font-size:13px"
+         onclick="msgList('${l.id}','${esc(l.name)}')">Message</button>`:''}
+       <i class="ti ti-x" style="color:var(--faint);cursor:pointer;font-size:18px"
+          onclick="delList('${l.id}','${esc(l.name)}')"></i>
+     </div>`).join('')
+     :'<div class="muted">None yet.</div>'}
+   </div>`;
+}
+
+async function openSmart(key,label){
+  const people=await api(`/api/lists/smart/${key}`);
+  showPeople(label, people, ()=>messageThese(people.map(p=>p.id), label));
+}
+async function msgSmart(key,label){
+  const people=await api(`/api/lists/smart/${key}`);
+  if(!people.length){ alert('Nobody in that list right now.'); return; }
+  messageThese(people.map(p=>p.id), label);
+}
+async function openList(id,name){
+  const l=await api('/api/lists/'+id);
+  showPeople(name, l.people, ()=>messageThese(l.people.map(p=>p.id), name), id);
+}
+async function msgList(id,name){
+  const l=await api('/api/lists/'+id);
+  if(!l.people.length){ alert('That list is empty.'); return; }
+  messageThese(l.people.map(p=>p.id), name);
+}
+async function delList(id,name){
+  if(!confirm(`Delete the list "${name}"?\n\nThe members themselves are untouched.`))return;
+  await api('/api/lists/'+id,{method:'DELETE'});
+  go('lists');
+}
+
+/** One modal for showing any set of people, with a Message button. */
+function showPeople(title, people, onMsg, listId){
+  window._onMsg = onMsg;
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div class="h" style="font-size:22px;font-weight:500">${esc(title)}</div>
+    <div class="muted" style="margin-bottom:20px">
+      ${people.length} ${people.length===1?'person':'people'}</div>
+    <div style="max-height:400px;overflow-y:auto;border:1px solid var(--line);border-radius:9px">
+      ${people.map(p=>`<div style="display:flex;align-items:center;gap:12px;padding:11px 14px;
+           border-bottom:1px solid var(--line2)">
+        <div class="av" style="width:30px;height:30px;font-size:11px">${ini(p.name)}</div>
+        <div style="flex:1;min-width:0;cursor:pointer" onclick="close_();openMember('${p.id}')">
+          <div style="font-weight:600;color:var(--ink);font-size:13px">${esc(p.name)}</div>
+          <div class="muted" style="font-family:var(--mono);font-size:12px">
+            ${esc(p.email || p.phone || 'cannot be reached')}</div></div>
+        ${p.stage?`<span class="tag t-n">${esc(p.stage)}</span>`:''}
+        ${listId?`<i class="ti ti-x" style="color:var(--faint);cursor:pointer"
+          onclick="event.stopPropagation();rmFromList('${listId}','${p.id}','${esc(title)}')"></i>`:''}
+      </div>`).join('')||'<div class="muted" style="padding:16px">Nobody.</div>'}
+    </div>
+    <div style="display:flex;gap:12px;margin-top:22px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Close</button>
+      ${people.length?`<button class="btn" style="flex:2" onclick="close_();window._onMsg()">
+        Message all ${people.length}</button>`:''}
+    </div>
+  </div></div>`;
+}
+async function rmFromList(listId, personId, name){
+  await api(`/api/lists/${listId}/members/${personId}`,{method:'DELETE'});
+  openList(listId, name);
 }
 
 (async()=>{

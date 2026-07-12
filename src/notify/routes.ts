@@ -55,6 +55,97 @@ export function registerNotifyRoutes(app: FastifyInstance) {
       reply.code(201).send(s);
     });
 
+  /**
+   * THE AUDIENCE PICKER.
+   *
+   * Every review of every ChMS names the same thing as the killer feature:
+   * "send from the database, filtering recipients by criteria." A count is not
+   * an audience. "Send to 3" tells a pastor nothing — WHICH three?
+   *
+   * This returns the actual PEOPLE, with how each one would be reached, so he
+   * can look at the list before he pays for it.
+   */
+  app.post<{ Body: {
+    stage?: string; group_id?: string; service?: string; q?: string;
+    has_email?: boolean; has_phone?: boolean; no_group?: boolean;
+    at_risk_weeks?: number; never_attended?: boolean;
+    person_ids?: string[];
+  } }>("/api/notify/audience", auth, async (req) =>
+    tenantTx(req, async (tx) => {
+      const f = req.body ?? {};
+      const w: string[] = ["p.archived_at IS NULL", "NOT p.is_deceased"];
+      const v: unknown[] = [];
+
+      if (f.person_ids?.length) { v.push(f.person_ids); w.push(`p.id = ANY($${v.length}::uuid[])`); }
+      if (f.stage)    { v.push(f.stage);    w.push(`js.key = $${v.length}`); }
+      if (f.group_id) {
+        v.push(f.group_id);
+        // includes everyone BENEATH the group, not just those pinned to it
+        w.push(`(p.home_group_id IN (
+                  WITH RECURSIVE sub AS (
+                    SELECT id FROM groups WHERE id = $${v.length}
+                    UNION ALL SELECT g.id FROM groups g JOIN sub ON g.parent_id = sub.id)
+                  SELECT id FROM sub))`);
+      }
+      if (f.service)  { v.push(f.service);  w.push(`p.usual_service = $${v.length}`); }
+      if (f.q) {
+        v.push(`%${f.q}%`);
+        w.push(`(coalesce(p.first_name,'')||' '||coalesce(p.last_name,'')) ILIKE $${v.length}`);
+      }
+      if (f.has_email)  w.push(`p.email IS NOT NULL`);
+      if (f.has_phone)  w.push(`coalesce(p.phone, p.phone_2) IS NOT NULL`);
+      if (f.no_group)   w.push(`p.home_group_id IS NULL`);
+      if (f.never_attended) w.push(`p.last_attended_at IS NULL`);
+      if (f.at_risk_weeks) {
+        v.push(f.at_risk_weeks);
+        w.push(`p.last_attended_at IS NOT NULL
+                AND p.last_attended_at < now() - ($${v.length} * interval '7 days')`);
+      }
+
+      const { rows } = await tx.query(
+        `SELECT p.id,
+                trim(coalesce(p.first_name,'')||' '||coalesce(p.last_name,'')) AS name,
+                p.phone, p.phone_2, p.email::text AS email,
+                js.label AS stage, g.name AS group_name, p.usual_service,
+                p.last_attended_at,
+                p.is_deceased,
+                coalesce(c.status,'granted')  <> 'revoked' AS sms_ok,
+                coalesce(ce.status,'granted') <> 'revoked' AS email_ok,
+                d.is_dnd
+           FROM persons p
+           LEFT JOIN journey_stages js ON js.id = p.journey_stage_id
+           LEFT JOIN groups g          ON g.id  = p.home_group_id
+           LEFT JOIN consents c        ON c.person_id = p.id AND c.channel='sms'
+           LEFT JOIN consents ce       ON ce.person_id = p.id AND ce.channel='email'
+           LEFT JOIN dnd_status d      ON d.phone = coalesce(p.phone, p.phone_2)
+          WHERE ${w.join(" AND ")}
+          ORDER BY p.last_name NULLS LAST, p.first_name
+          LIMIT 2000`, v);
+
+      // How each person would actually be reached — the pastor sees this per row.
+      const people = rows.map((r: any) => {
+        const email = !!r.email && r.email_ok;
+        const phone = !!(r.phone || r.phone_2) && r.sms_ok;
+        return {
+          ...r,
+          reach: email ? "email" : phone ? "sms" : "none",
+          why: email ? null
+             : !r.email && !r.phone && !r.phone_2 ? "No phone or email"
+             : !r.sms_ok && !r.email_ok ? "Opted out"
+             : !r.email && !phone ? "Opted out of SMS"
+             : null,
+        };
+      });
+
+      return {
+        people,
+        total: people.length,
+        by_email: people.filter(p => p.reach === "email").length,
+        by_sms:   people.filter(p => p.reach === "sms").length,
+        unreachable: people.filter(p => p.reach === "none").length,
+      };
+    }));
+
   /** Compose. Nothing is sent — this shows the pastor exactly what WILL happen. */
   app.post<{ Body: { name: string; body: string; subject?: string;
                      channel?: "sms" | "email" | "cascade";
