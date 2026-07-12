@@ -59,46 +59,46 @@ processing, no transaction fees. Finance module RECORDS and RECONCILES only.
 
 ## Design system
 
-LAYOUT — Bankio reference. Do not redesign; reskin only.
-- Page canvas #E9EFEF. Each screen is a white rounded card (16px) floating on
-  it. Sidebar lives INSIDE the white card, not outside it.
-- Sidebar (148px): logo + chevron -> "MAIN MENU" section label -> nav items
-  (icon + label) -> "OTHERS" section label -> Settings, Support.
-  Active item = charcoal pill, white text. Inactive = #5A686E text.
-- Header: "Welcome, {first_name}" + one-line subtitle. Right cluster: circular
-  outline icon buttons (search, mail, bell) + avatar circle. Hairline divider under.
-- Title row: screen title (16px/500) + pill search field + filter icon, right-aligned.
-- Stat row: 3 columns — (1) two stacked stats with arrow + delta chip + "Last
-  month" caption, (2) headline stat + inner #E9EFEF card w/ sparkline,
-  (3) dark charcoal highlight card.
-- Chart row: donut w/ center label + legend rows (dot, name, count, %) |
-  bar chart w/ y-axis labels + period dropdown pill.
-- Table screen: compact stat row w/ vertical dividers, then charcoal header row,
-  avatar+name cells, status pills, hairline row borders.
+LAYOUT — Prodify reference. Soft, warm, human. Not a banking dashboard.
+- Page canvas #FAFAFC. Cards are white with a 1px #F0F0F5 border and 16px radius.
+  NO heavy shadows. Airy, generous whitespace.
+- Sidebar (196px): user profile card at the TOP (avatar + name + "Online" in mint).
+  Nav items are icon + label, 11px radius. ACTIVE = pale violet pill (#EDE9FE) with
+  violet text. Below the nav, a "My church" section with colour-dotted group rows.
+  A violet promo card sits at the bottom.
+- Greeting is two lines: "Hello there" in dark, then a question in a
+  mint-to-violet GRADIENT ("How is the church doing today?"). This is the signature.
+- Action pills under the greeting: first one violet-filled with a sparkle icon
+  ("Ask Hispren"), the rest white with a hairline border.
+- Card headers: violet icon + 13px semibold title.
+- Progress bars: 6px, fully rounded, on a #F1F1F6 track.
+- Status pills: 8px radius, tinted background + matching dark text, 500 weight.
+- Everything is ROUNDED and SOFT. No hard edges, no dark chrome.
 
-PALETTE (REF 3) — five colors, no others.
-  --charcoal  #394449   structure: sidebar active, dark cards, bars, primary text
-  --slate     #97A7AB   labels, muted text, secondary data
-  --offwhite  #E9EFEF   page canvas, dividers, inner cards
-  --amber     #F7A81B   avatar, alerts, tertiary data
-  --orange    #F08200   ENERGY: the live/urgent number only
-
-  Derived: text-mid #5A686E - slate-tint #E4EAEB (+ text #4A5A60)
-           amber-tint #FDF0DA (+ text #8A5A00) - orange-tint #FBE3D0 (+ text #A85A00)
+PALETTE (Prodify)
+  --violet      #6D4AFF   primary: buttons, active nav, headline emphasis
+  --violet-dk   #5B3FD9   text on pale violet
+  --violet-soft #EDE9FE   active nav pill, tints
+  --violet-wash #F7F5FF   hover states, inner tiles
+  --mint        #2DD4BF   positive/live: online dot, gradient start, good progress
+  --mint-dk     #0F766E   text on mint tint
+  --coral       #FB7185   urgent: duplicates, overdue, at-risk
+  --coral-dk    #BE3455   text on coral tint
+  --amber       #FB923C   warning: incomplete data
+  --page        #FAFAFC
+  --card        #FFFFFF   --line #F0F0F5   --line2 #F5F5F9
+  --text        #1F2033   --muted #9195A8
+  --chip        #F1F1F6 (+ text #6B7080)
 
 RULES
-- Orange marks the LIVE or URGENT figure (this Sunday's bar, at-risk count,
-  live scan rate). Never decorative. Charcoal carries structure; slate carries
-  everything muted.
-- Text on a tinted chip uses the dark shade of that same tint. Never black.
-- Status pills: Contacted = amber tint - Pending = slate tint - Overdue = orange tint.
-- Delta chips: growth = amber tint - decline = slate tint.
-- Radius: 16px screens, 12px cards, 10px inner, 20px pills.
-- Two weights only: 400 regular, 500 for values and active items.
-- Sentence case everywhere. Never Title Case.
-- Tenant brand_color may override --orange only. Charcoal/slate/offwhite are fixed.
-- Multi-service is first-class: attendance is per-service (1st/2nd/3rd), never a
-  single undifferentiated number.
+- Violet is the product. Mint is life and progress. Coral is what needs a human.
+  Amber is data that is merely incomplete. Never decorative.
+- The gradient headline (mint to violet) appears once per screen, in the greeting.
+- Font: Plus Jakarta Sans. Weights 400/500/600 only.
+- Sentence case everywhere.
+- Tenant brand_color may override --violet only.
+- Multi-service is first-class: attendance shows 1st/2nd/3rd as separate tiles,
+  the largest one filled violet. Never a single undifferentiated number.
 
 ## Nigerian market constraints (do not "optimise" these away)
 
