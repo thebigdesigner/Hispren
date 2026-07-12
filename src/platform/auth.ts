@@ -11,7 +11,7 @@
  *    finance > staff > leader > readonly).
  */
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
-import * as argon2 from "argon2";
+import { hash as argonHash, verify as argonVerify } from "@node-rs/argon2";
 import { FastifyRequest, FastifyReply } from "fastify";
 import { platformQuery, withTenant } from "./db";
 import { requireTenant } from "./tenant";
@@ -37,7 +37,7 @@ export async function login(
   }>(`SELECT id, password_hash FROM app_users WHERE email = $1`, [email]);
   const user = u.rows[0];
   // Constant-ish time: always run argon2 even for unknown users.
-  const ok = await argon2.verify(
+  const ok = await argonVerify(
     user?.password_hash ??
       "$argon2id$v=19$m=65536,t=3,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     password

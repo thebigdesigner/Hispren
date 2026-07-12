@@ -65,7 +65,21 @@ export async function tenantResolver(
   // Behind the load balancer, ensure trustProxy is configured so a client
   // cannot spoof X-Forwarded-Host to a hostname the LB didn't route.
   const hostname = req.hostname.toLowerCase().split(":")[0];
-  const tenant = await resolveHost(hostname);
+  let tenant = await resolveHost(hostname);
+
+  // Workspace-style fallback: the client names its church explicitly.
+  // This is NOT a security hole — auth.ts still requires the session to be
+  // bound to this exact tenant, so naming a church you have no account at
+  // yields 401. It is how Slack, Notion, and every other multi-tenant app
+  // works when you are not on a vanity domain yet.
+  if (!tenant) {
+    const named = (req.headers["x-church"] as string | undefined)?.toLowerCase().trim();
+    if (named && /^[a-z0-9-]{1,63}$/.test(named)) {
+      const r = await platformQuery<TenantRef>(
+        `SELECT id, status FROM tenants WHERE subdomain = $1`, [named]);
+      tenant = r.rows[0] ?? null;
+    }
+  }
 
   if (tenant === null) {
     // Platform routes (marketing, superadmin) are mounted under a separate

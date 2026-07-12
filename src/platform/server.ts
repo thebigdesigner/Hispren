@@ -6,6 +6,8 @@
  */
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
+import fstatic from "@fastify/static";
+import path from "path";
 import { tenantResolver, requireTenant } from "./tenant";
 import { authenticate, requireRole, login, logout, tenantTx } from "./auth";
 import { healthcheck } from "./db";
@@ -17,6 +19,12 @@ export function buildServer() {
     trustProxy: true, // REQUIRED behind the LB so req.hostname is the routed host
   });
   app.register(cookie);
+
+  // The frontend. Served by the same process — one deploy, no build step.
+  app.register(fstatic, {
+    root: path.join(__dirname, "..", "..", "public"),
+    prefix: "/",
+  });
 
   app.addHook("onRequest", tenantResolver);
 

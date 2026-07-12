@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hispren Church OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --charcoal:#394449; --slate:#97A7AB; --offwhite:#E9EFEF;
+    --amber:#F7A81B; --orange:#F08200;
+    --mid:#5A686E; --slate-tint:#E4EAEB; --slate-text:#4A5A60;
+    --amber-tint:#FDF0DA; --amber-text:#8A5A00;
+    --orange-tint:#FBE3D0; --orange-text:#A85A00;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--offwhite);
+       color:var(--charcoal);font-size:14px;-webkit-font-smoothing:antialiased}
+  button{font-family:inherit;cursor:pointer;border:none}
+  input,select{font-family:inherit;font-size:13px;padding:9px 11px;border:1px solid var(--slate-tint);
+       border-radius:8px;width:100%;background:#fff;color:var(--charcoal)}
+  input:focus,select:focus{outline:none;border-color:var(--charcoal)}
+  label{display:block;font-size:11px;color:var(--slate);margin-bottom:5px}
+  .field{margin-bottom:12px}
+  .btn{background:var(--charcoal);color:#fff;font-size:13px;font-weight:500;
+       padding:9px 16px;border-radius:20px}
+  .btn:hover{opacity:.9}
+  .btn-ghost{background:transparent;color:var(--mid);border:1px solid var(--slate-tint)}
+  .btn-orange{background:var(--orange);color:#fff}
+  .pill{font-size:11px;padding:3px 9px;border-radius:12px;display:inline-block;white-space:nowrap}
+  .p-slate{background:var(--slate-tint);color:var(--slate-text)}
+  .p-amber{background:var(--amber-tint);color:var(--amber-text)}
+  .p-orange{background:var(--orange-tint);color:var(--orange-text)}
+  .card{background:#fff;border-radius:12px;padding:16px}
+  .muted{color:var(--slate);font-size:11px}
+  .avatar{width:30px;height:30px;border-radius:50%;background:var(--slate-tint);color:var(--slate-text);
+       display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex-shrink:0}
+
+  /* ---- login ---- */
+  #login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  #login .box{background:#fff;border-radius:16px;padding:32px;width:100%;max-width:380px}
+  .brand{display:flex;align-items:center;gap:9px;margin-bottom:6px}
+  .brand-mark{width:32px;height:32px;border-radius:9px;background:var(--charcoal);color:var(--orange);
+       display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600}
+
+  /* ---- app shell ---- */
+  #app{display:none;min-height:100vh;padding:14px}
+  .shell{background:#fff;border-radius:16px;display:flex;overflow:hidden;min-height:calc(100vh - 28px)}
+  .side{width:180px;padding:18px 12px;flex-shrink:0;border-right:1px solid var(--offwhite)}
+  .side .sec{font-size:10px;color:var(--slate);letter-spacing:.06em;padding:14px 8px 6px}
+  .nav{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:8px;
+       color:var(--mid);font-size:13px;cursor:pointer;margin-bottom:2px}
+  .nav:hover{background:var(--offwhite)}
+  .nav.on{background:var(--charcoal);color:#fff;font-weight:500}
+  .main{flex:1;padding:18px 22px;min-width:0}
+  .head{display:flex;justify-content:space-between;align-items:flex-start;
+        padding-bottom:14px;border-bottom:1px solid var(--offwhite);margin-bottom:16px}
+  .title{font-size:19px;font-weight:600}
+
+  /* ---- stats ---- */
+  .stats{display:flex;gap:22px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+  .stat .n{font-size:23px;font-weight:600}
+  .sep{width:1px;height:34px;background:var(--offwhite)}
+
+  /* ---- table ---- */
+  table{width:100%;border-collapse:collapse}
+  thead{background:var(--charcoal)}
+  th{font-size:10px;color:var(--slate);font-weight:400;text-align:left;padding:10px 12px}
+  th:first-child{border-radius:10px 0 0 0} th:last-child{border-radius:0 10px 0 0}
+  td{padding:11px 12px;border-bottom:1px solid var(--offwhite);font-size:13px;vertical-align:middle}
+  tbody tr:hover{background:#FAFBFB;cursor:pointer}
+  tr.dupe{background:var(--orange-tint)}
+
+  .banner{background:var(--orange-tint);border-radius:10px;padding:12px 14px;
+          display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  .err{background:var(--orange-tint);color:var(--orange-text);padding:9px 12px;
+       border-radius:8px;font-size:12px;margin-bottom:12px}
+  .modal-bg{position:fixed;inset:0;background:rgba(57,68,73,.5);display:flex;
+       align-items:flex-start;justify-content:center;padding:36px 16px;overflow-y:auto;z-index:9}
+  .modal{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:640px}
+  .sect{font-size:11px;color:var(--slate);letter-spacing:.05em;
+        margin:18px 0 10px;padding-bottom:5px;border-bottom:1px solid var(--offwhite)}
+  .sect:first-of-type{margin-top:0}
+  .row{display:flex;justify-content:space-between;padding:7px 0;font-size:13px}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <div class="brand">
+      <div class="brand-mark">H</div>
+      <div style="font-size:17px;font-weight:600">Hispren</div>
+    </div>
+    <div class="muted" style="margin-bottom:22px">Church OS</div>
+    <div id="loginErr"></div>
+    <div class="field">
+      <label>Church</label>
+      <input id="church" value="dominion" placeholder="dominion" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input id="email" type="email" value="pastor@dominion.test" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input id="pw" type="password" value="DominionPastor2026" autocomplete="current-password">
+    </div>
+    <button class="btn" style="width:100%;margin-top:6px" onclick="doLogin()">Sign in</button>
+  </div>
+</div>
+
+<div id="app">
+  <div class="shell">
+    <div class="side">
+      <div class="brand" style="padding:0 8px 4px">
+        <div class="brand-mark" style="width:28px;height:28px;font-size:15px">H</div>
+        <div style="font-size:15px;font-weight:600">Hispren</div>
+      </div>
+      <div class="sec">MAIN MENU</div>
+      <div class="nav on"  data-v="members"    onclick="go('members')">Members</div>
+      <div class="nav"     data-v="duplicates" onclick="go('duplicates')">Duplicates <span id="dupeBadge"></span></div>
+      <div class="nav"     data-v="import"     onclick="go('import')">Bulk import</div>
+      <div class="sec">OTHERS</div>
+      <div class="nav" onclick="logout()">Sign out</div>
+      <div style="position:absolute;bottom:0"></div>
+    </div>
+
+    <div class="main">
+      <div class="head">
+        <div>
+          <div style="font-size:15px;font-weight:600" id="whoName">—</div>
+          <div class="muted" id="whoChurch">—</div>
+        </div>
+        <div class="avatar" id="whoAv">—</div>
+      </div>
+      <div id="view"></div>
+    </div>
+  </div>
+</div>
+
+<div id="modal"></div>
+
+<script>
+let CHURCH = '', ME = null, STAGES = [];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const initials = n => (n||'?').split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase();
+
+/** Every call names the church. The session is still bound to it server-side —
+ *  naming a church you have no account at yields 401, not access. */
+async function api(path, opts = {}) {
+  const r = await fetch(path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'X-Church': CHURCH, ...(opts.headers||{}) },
+    credentials: 'include',
+  });
+  if (r.status === 401) { logout(); throw new Error('signed out'); }
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.detail || body.error || 'request failed');
+  return body;
+}
+
+async function doLogin() {
+  CHURCH = $('#church').value.trim().toLowerCase();
+  $('#loginErr').innerHTML = '';
+  try {
+    await api('/api/auth/login', { method:'POST',
+      body: JSON.stringify({ email:$('#email').value.trim(), password:$('#pw').value }) });
+    sessionStorage.setItem('church', CHURCH);
+    await boot();
+  } catch (e) {
+    $('#loginErr').innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  }
+}
+
+function logout() {
+  fetch('/api/auth/logout', { method:'POST', headers:{'X-Church':CHURCH}, credentials:'include' })
+    .catch(()=>{});
+  sessionStorage.clear();
+  $('#app').style.display = 'none';
+  $('#login').style.display = 'flex';
+}
+
+async function boot() {
+  ME = await api('/api/me');
+  $('#login').style.display = 'none';
+  $('#app').style.display = 'block';
+  $('#whoName').textContent   = 'Welcome back';
+  $('#whoChurch').textContent = ME.tenant.name;
+  $('#whoAv').textContent     = initials(ME.tenant.name);
+  const d = await api('/api/duplicates').catch(()=>[]);
+  $('#dupeBadge').innerHTML = d.length
+    ? `<span class="pill p-orange" style="margin-left:auto">${d.length}</span>` : '';
+  go('members');
+}
+
+function go(v) {
+  document.querySelectorAll('.nav').forEach(n => n.classList.toggle('on', n.dataset.v === v));
+  ({ members: viewMembers, duplicates: viewDuplicates, import: viewImport })[v]();
+}
+
+/* ------------------------------- MEMBERS ------------------------------- */
+async function viewMembers(q = '') {
+  $('#view').innerHTML = '<div class="muted">Loading…</div>';
+  const d = await api('/api/members?limit=100' + (q ? '&q=' + encodeURIComponent(q) : ''));
+  const dupes = await api('/api/duplicates').catch(()=>[]);
+  const flagged = new Set(dupes.flatMap(x => [x.person_a.id, x.person_b.id]));
+  const billable = d.members.filter(m => m.is_billable).length;
+  const noContact = d.members.filter(m => !m.phone && !m.phone_2 && !m.email).length;
+
+  $('#view').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="title">Members</div>
+      <div style="display:flex;gap:8px">
+        <input id="q" value="${esc(q)}" placeholder="Search name, phone, code" style="width:230px">
+        <button class="btn" onclick="openForm()">+ Register</button>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="muted">Total members</div><div class="n">${d.total}</div></div>
+      <div class="sep"></div>
+      <div class="stat"><div class="muted">Active (billable)</div><div class="n">${billable}</div></div>
+      <div class="sep"></div>
+      <div class="stat"><div class="muted">No phone or email</div><div class="n">${noContact}</div></div>
+    </div>
+    ${dupes.length ? `<div class="banner">
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:500;color:var(--orange-text)">
+          ${dupes.length} possible duplicate${dupes.length>1?'s':''} need review</div>
+        <div class="muted" style="color:var(--orange-text)">
+          Nothing is merged without you.</div>
+      </div>
+      <button class="btn btn-orange" onclick="go('duplicates')">Review</button>
+    </div>` : ''}
+    <table>
+      <thead><tr>
+        <th>Member</th><th>Phone</th><th>Stage</th><th>Cell / dept</th><th>Service</th>
+      </tr></thead>
+      <tbody>${d.members.map(m => `
+        <tr class="${flagged.has(m.id)?'dupe':''}" onclick="openMember('${m.id}')">
+          <td><div style="display:flex;align-items:center;gap:10px">
+            <div class="avatar">${initials(m.full_name)}</div>
+            <div>
+              <div>${esc(m.full_name)}</div>
+              ${flagged.has(m.id)
+                ? `<div class="muted" style="color:var(--orange-text)">Possible duplicate</div>`
+                : m.member_code ? `<div class="muted">${esc(m.member_code)}</div>` : ''}
+            </div></div></td>
+          <td>${esc(m.phone || m.phone_2 || '—')}</td>
+          <td><span class="pill ${m.stage_key==='first_timer'?'p-amber':m.stage_key==='visitor'?'p-orange':'p-slate'}">
+            ${esc(m.stage_label || '—')}</span></td>
+          <td>${esc(m.home_group_name || '—')}</td>
+          <td>${esc((m.usual_service||'—').replace(' Service',''))}</td>
+        </tr>`).join('') || '<tr><td colspan="5" class="muted">No members yet.</td></tr>'}
+      </tbody>
+    </table>`;
+  const box = $('#q');
+  box.oninput = e => { clearTimeout(window._t);
+    window._t = setTimeout(() => viewMembers(e.target.value), 300); };
+  box.focus(); box.setSelectionRange(box.value.length, box.value.length);
+}
+
+/* ---------------------------- MEMBER DETAIL ---------------------------- */
+async function openMember(id) {
+  const m = await api('/api/members/' + id);
+  const qr = await api(`/api/members/${id}/qr`).catch(()=>null);
+  let health = null;
+  try { health = await api(`/api/members/${id}/health`); } catch {}
+  const f = (l, v) => v ? `<div class="row"><span class="muted">${l}</span><span>${esc(v)}</span></div>` : '';
+
+  $('#modal').innerHTML = `<div class="modal-bg" onclick="if(event.target===this)close_()">
+    <div class="modal">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+        <div class="avatar" style="width:44px;height:44px;font-size:15px">${initials(m.full_name)}</div>
+        <div style="flex:1">
+          <div style="font-size:17px;font-weight:600">${esc(m.full_name)}</div>
+          <div class="muted">${esc(m.stage_label||'')} · ${esc(m.home_group_name||'no group')}</div>
+        </div>
+        <span class="pill p-slate">${esc(m.source||'')}</span>
+      </div>
+
+      <div class="sect">CONTACT</div>
+      ${f('Phone', m.phone)}${f('Second phone', m.phone_2)}${f('Email', m.email)}
+      ${f('Address', m.address)}${f('Town', m.town)}${f('LGA', m.lga)}
+
+      <div class="sect">ORIGIN</div>
+      ${f('State of origin', m.state_of_origin)}${f('LGA of origin', m.lga_of_origin)}
+      ${f('Date of birth', m.date_of_birth?.slice?.(0,10))}
+      ${f('Gender', m.gender)}${f('Marital status', m.marital_status)}
+
+      <div class="sect">CHURCH</div>
+      ${f('Service', m.usual_service)}${f('Post held', m.post_held)}
+      ${f('Occupation', m.occupation)}${f('Workplace', m.workplace)}
+      ${f('Household', m.household_name)}
+
+      ${health ? `<div class="sect">HEALTH — pastor only, this view was logged</div>
+        <div class="row"><span class="muted">Genotype</span>
+          <span class="pill ${['AS','SS','AC','SC'].includes(health.genotype)?'p-orange':'p-slate'}">
+            ${esc(health.genotype||'—')}</span></div>
+        ${f('Blood group', health.blood_group)}
+        ${['AS','SS','AC','SC'].includes(health.genotype)
+          ? `<div class="muted" style="color:var(--orange-text);margin-top:8px">
+               Carrier. Flag for marriage counselling — AS × AS carries a 1-in-4
+               sickle cell risk.</div>` : ''}` : ''}
+
+      ${qr ? `<div class="sect">QR IDENTITY</div>
+        <div style="display:flex;align-items:center;gap:14px">
+          <img alt="QR code" width="96" height="96" style="border-radius:8px"
+            src="https://api.qrserver.com/v1/create-qr-code/?size=96x96&data=${encodeURIComponent(qr.qr_token)}">
+          <div>
+            <div class="muted">Scan at the gate to mark attendance.</div>
+            <button class="btn btn-ghost" style="margin-top:8px"
+              onclick="rotate('${id}')">Rotate code</button>
+          </div>
+        </div>` : ''}
+
+      <div style="display:flex;gap:8px;margin-top:22px">
+        <button class="btn btn-ghost" style="flex:1" onclick="close_()">Close</button>
+      </div>
+    </div></div>`;
+}
+
+async function rotate(id) { await api(`/api/members/${id}/qr/rotate`, {method:'POST'}); openMember(id); }
+function close_() { $('#modal').innerHTML = ''; }
+
+/* ---------------------------- REGISTRATION ----------------------------- */
+function openForm() {
+  const t = (n,l,ty='text') => `<div class="field"><label>${l}</label>
+    <input id="f_${n}" type="${ty}"></div>`;
+  $('#modal').innerHTML = `<div class="modal-bg" onclick="if(event.target===this)close_()">
+    <div class="modal">
+      <div style="font-size:17px;font-weight:600;margin-bottom:4px">Register a member</div>
+      <div class="muted" style="margin-bottom:18px">
+        Phone numbers are normalised automatically. Duplicates are flagged, never auto-merged.</div>
+      <div id="formErr"></div>
+
+      <div class="sect">NAME</div>
+      <div class="grid3">${t('first_name','First name')}${t('middle_name','Other name')}${t('last_name','Surname')}</div>
+
+      <div class="sect">CONTACT — two numbers, most people carry two SIMs</div>
+      <div class="grid2">${t('phone','Phone 1')}${t('phone_2','Phone 2')}</div>
+      ${t('email','Email','email')}
+
+      <div class="sect">ORIGIN</div>
+      <div class="grid2">${t('state_of_origin','State of origin')}${t('lga_of_origin','LGA of origin')}</div>
+
+      <div class="sect">RESIDENCE</div>
+      ${t('address','Address')}
+      <div class="grid2">${t('town','Town')}${t('lga','LGA')}</div>
+
+      <div class="sect">DETAILS</div>
+      <div class="grid2">
+        <div class="field"><label>Gender</label><select id="f_gender">
+          <option value="">—</option><option value="male">Male</option><option value="female">Female</option>
+        </select></div>
+        ${t('date_of_birth','Date of birth','date')}
+      </div>
+      <div class="grid2">${t('occupation','Work / school')}${t('workplace','Place of work / school')}</div>
+      <div class="grid2">
+        <div class="field"><label>Service</label><select id="f_usual_service">
+          <option value="">—</option><option>1st Service</option><option>2nd Service</option>
+          <option>3rd Service</option></select></div>
+        ${t('post_held','Post held')}
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:22px">
+        <button class="btn btn-ghost" style="flex:1" onclick="close_()">Cancel</button>
+        <button class="btn" style="flex:2" onclick="save()">Register</button>
+      </div>
+    </div></div>`;
+}
+
+async function save() {
+  const ids = ['first_name','middle_name','last_name','phone','phone_2','email',
+    'state_of_origin','lga_of_origin','address','town','lga','gender','date_of_birth',
+    'occupation','workplace','usual_service','post_held'];
+  const b = { source: 'manual' };
+  ids.forEach(k => { const v = $('#f_'+k)?.value.trim(); if (v) b[k] = v; });
+  if (!b.first_name) { $('#formErr').innerHTML = '<div class="err">A first name is required.</div>'; return; }
+  try {
+    await api('/api/members', { method:'POST', body: JSON.stringify(b) });
+    close_(); await boot();
+  } catch (e) { $('#formErr').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+
+/* ----------------------------- DUPLICATES ------------------------------ */
+async function viewDuplicates() {
+  const d = await api('/api/duplicates');
+  $('#view').innerHTML = `
+    <div class="title" style="margin-bottom:4px">Duplicates</div>
+    <div class="muted" style="margin-bottom:18px">
+      A name alone is never enough — Nigerian names repeat. These share a phone,
+      an email, or a date of birth. Nothing merges without you.</div>
+    ${d.length ? d.map(x => `
+      <div class="card" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${(x.reasons||[]).map(r=>`<span class="pill p-orange">${esc(r)}</span>`).join('')}
+          </div>
+          <span class="muted">score ${x.score}</span>
+        </div>
+        <div class="grid2">
+          ${[x.person_a, x.person_b].map((p, i) => `
+            <div style="border:1px solid var(--offwhite);border-radius:10px;padding:12px">
+              <div style="font-weight:500;margin-bottom:6px">${esc(p.name)}</div>
+              <div class="muted">${esc(p.phone||'no phone')}</div>
+              <div class="muted">${esc(p.source||'')} · ${new Date(p.created_at).toLocaleDateString()}</div>
+              <button class="btn" style="width:100%;margin-top:10px"
+                onclick="merge('${p.id}','${(i?x.person_a:x.person_b).id}')">Keep this one</button>
+            </div>`).join('')}
+        </div>
+        <button class="btn btn-ghost" style="width:100%;margin-top:10px"
+          onclick="dismiss('${x.id}')">Not a duplicate</button>
+      </div>`).join('')
+    : '<div class="card muted">No duplicates to review.</div>'}`;
+}
+
+async function merge(keep, drop) {
+  if (!confirm('Merge these records? The other one is archived, but kept in full in the merge log.')) return;
+  await api('/api/duplicates/merge', { method:'POST',
+    body: JSON.stringify({ keep_id: keep, merge_id: drop }) });
+  await boot(); go('duplicates');
+}
+async function dismiss(id) {
+  await api(`/api/duplicates/${id}/dismiss`, { method:'POST' });
+  await boot(); go('duplicates');
+}
+
+/* ------------------------------- IMPORT -------------------------------- */
+function viewImport() {
+  $('#view').innerHTML = `
+    <div class="title" style="margin-bottom:4px">Bulk import</div>
+    <div class="muted" style="margin-bottom:18px">
+      Upload a CSV. Columns are matched automatically. Nothing is written until you commit.</div>
+    <div class="card">
+      <input type="file" id="csv" accept=".csv" style="border:none;padding:0">
+      <div id="preview" style="margin-top:16px"></div>
+    </div>`;
+  $('#csv').onchange = async e => {
+    const file = e.target.files[0]; if (!file) return;
+    const csv = await file.text();
+    $('#preview').innerHTML = '<div class="muted">Reading…</div>';
+    try {
+      const p = await api('/api/import/preview', { method:'POST',
+        body: JSON.stringify({ filename: file.name, csv }) });
+      window._imp = { csv, ...p };
+      $('#preview').innerHTML = `
+        <div class="stats" style="margin-bottom:14px">
+          <div class="stat"><div class="muted">Rows</div><div class="n">${p.total}</div></div>
+          <div class="sep"></div>
+          <div class="stat"><div class="muted">Valid</div><div class="n">${p.valid}</div></div>
+          <div class="sep"></div>
+          <div class="stat"><div class="muted">Errors</div>
+            <div class="n" style="color:${p.errors?'var(--orange)':'inherit'}">${p.errors}</div></div>
+        </div>
+        <div class="muted" style="margin-bottom:6px">Matched columns</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+          ${Object.entries(p.column_map).map(([h,f]) =>
+            `<span class="pill p-slate">${esc(h)} → ${esc(f)}</span>`).join('')}
+        </div>
+        ${p.unmapped_columns.length ? `
+          <div class="muted" style="margin-bottom:6px">Ignored</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+            ${p.unmapped_columns.map(c=>`<span class="pill p-orange">${esc(c)}</span>`).join('')}
+          </div>` : ''}
+        ${p.preview.filter(r=>r.warnings.length||r.errors.length).slice(0,6).map(r=>`
+          <div class="muted" style="margin-bottom:3px">
+            Row ${r.row}: ${esc([...r.errors, ...r.warnings].join(' · '))}</div>`).join('')}
+        <button class="btn" style="width:100%;margin-top:14px" onclick="commit()">
+          Import ${p.valid} member${p.valid===1?'':'s'}</button>`;
+    } catch (err) { $('#preview').innerHTML = `<div class="err">${esc(err.message)}</div>`; }
+  };
+}
+
+async function commit() {
+  const i = window._imp;
+  const r = await api('/api/import/commit', { method:'POST',
+    body: JSON.stringify({ batch_id: i.batch_id, csv: i.csv, column_map: i.column_map }) });
+  alert(`Imported ${r.imported}. Skipped ${r.skipped}.`);
+  await boot();
+}
+
+/* -------------------------------- start -------------------------------- */
+(async () => {
+  const saved = sessionStorage.getItem('church');
+  if (saved) { CHURCH = saved; try { await boot(); return; } catch {} }
+  $('#login').style.display = 'flex';
+})();
+</script>
+</body>
+</html>
