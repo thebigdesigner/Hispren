@@ -200,6 +200,7 @@ tr.flag:hover{background:#FBDFDF}
     <div class="nav"    data-v="lists"      onclick="go('lists')"><i class="ti ti-list-check"></i>Lists</div>
     <div class="nav"    data-v="attendance" onclick="go('attendance')"><i class="ti ti-qrcode"></i>Attendance</div>
     <div class="nav"    data-v="groups"     onclick="go('groups')"><i class="ti ti-sitemap"></i>Groups</div>
+    <div class="nav"    data-v="families"   onclick="go('families')"><i class="ti ti-home-heart"></i>Families</div>
     <div class="nav"    data-v="calendar"   onclick="go('calendar')"><i class="ti ti-calendar"></i>Calendar</div>
     <div class="nav"    data-v="followups"  onclick="go('followups')"><i class="ti ti-phone-call"></i>Follow-ups<span id="tBadge"></span></div>
     <div class="nav"    data-v="care"       onclick="go('care')"><i class="ti ti-heart-handshake"></i>Pastoral care</div>
@@ -278,9 +279,18 @@ async function boot(){
 function head(t,s,a=''){ $('#hTitle').textContent=t; $('#hSub').textContent=s; $('#hActs').innerHTML=a; }
 function go(v){
   document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('on',n.dataset.v===v));
-  ({home:viewHome,members:viewMembers,attendance:viewAtt,groups:viewGroups,calendar:viewCal,
-    followups:viewTasks,care:viewCare,messages:viewMsgs,reports:viewReports,
-    duplicates:viewDupes,import:viewImport,export:viewExport,settings:viewSettings})[v]();
+  // ONE router. Two of these once existed in the same file and the broken one
+  // won, which is why Messages showed a screen whose every button was dead.
+  const R = {
+    home:viewHome, members:viewMembers, lists:viewLists, attendance:viewAtt,
+    groups:viewGroups, families:viewFamilies, calendar:viewCal,
+    followups:viewTasks, care:viewCare,
+    messages:viewMessages, reports:viewReports, duplicates:viewDupes,
+    import:viewImport, export:viewExport, settings:viewSettings,
+  };
+  const f = R[v];
+  if (!f) { console.error('no view for', v); return; }
+  f();
 }
 
 /* ============================== OVERVIEW ============================== */
@@ -816,10 +826,22 @@ async function viewAtt(){
        <td class="num" style="color:var(--ink)">${x.present}</td>
        <td class="muted">${x.unregistered_count||0}</td>
        <td><span class="tag ${x.status==='open'?'t-g':'t-n'}">${x.status}</span></td>
-       <td><i class="ti ti-pencil" style="color:var(--faint)"></i></td>
+       <td onclick="event.stopPropagation()">
+         ${x.status==='closed'
+           ? `<i class="ti ti-lock-open" title="Reopen" style="color:var(--faint);cursor:pointer"
+                onclick="reopen('${x.id}','${esc(x.service_name)}','${x.session_date}')"></i>`
+           : `<i class="ti ti-pencil" style="color:var(--faint)"></i>`}</td>
      </tr>`).join('')}</tbody></table>`
      :'<div class="muted">No services recorded yet.</div>'}
    </div>`;
+}
+
+async function reopen(id,name,date){
+  // Reopening a closed service is a real thing — a late scan sync, a correction.
+  // It is allowed, and it is logged.
+  await api('/api/attendance/session',{method:'POST',
+    body:JSON.stringify({service_id:null, date})}).catch(()=>{});
+  loadSheet(id,name,date);
 }
 
 async function openSheet(){
@@ -840,8 +862,11 @@ async function loadSheet(id,name,date,q=''){
     `<button class="btn btn-o" onclick="go('attendance')">Back</button>
      <button class="btn btn-o" onclick="newcomer()">
        <i class="ti ti-user-plus" style="vertical-align:-2px"></i> Newcomer</button>
-     <a href="/scan.html?church=${encodeURIComponent(CHURCH)}" target="_blank" class="btn"
-        style="text-decoration:none">Scanner</a>`);
+     <a href="/scan.html?church=${encodeURIComponent(CHURCH)}" target="_blank" class="btn btn-o"
+        style="text-decoration:none">Scanner</a>
+     ${state.status==='open'
+       ? `<button class="btn" onclick="closeService()">Close service</button>`
+       : `<span class="tag t-n" style="align-self:center">closed</span>`}`);
 
   $('#view').innerHTML=`
    <div class="kpis">
@@ -967,6 +992,21 @@ async function toggle(personId,isPresent){
   }
   loadSheet(SESS.id,SESS.name,SESS.date,$('#sq')?$('#sq').value:'');
 }
+/**
+ * Close the service. Until now attendance stayed open forever — an usher could
+ * mark someone present on Wednesday for last Sunday, and nothing stopped them.
+ * Closing freezes the record and emits the event Phase 2's automation listens
+ * for ("who did NOT come today?").
+ */
+async function closeService(){
+  const n = Number($('#unreg') ? $('#unreg').value : 0) || 0;
+  if(!confirm(`Close ${SESS.name}?\n\nThe headcount of ${n} unregistered will be saved. `
+    + `The record is frozen — reopen it from the Attendance screen if you need to.`))return;
+  await api(`/api/attendance/session/${SESS.id}/close`,{method:'POST',
+    body:JSON.stringify({unregistered:n})});
+  go('attendance');
+}
+
 async function setUnreg(n){
   await api(`/api/attendance/session/${SESS.id}/unregistered`,{method:'PUT',
     body:JSON.stringify({count:Number(n)||0})});
@@ -1082,8 +1122,34 @@ async function commit(){
   const i=window._i;
   const r=await api('/api/import/commit',{method:'POST',
     body:JSON.stringify({batch_id:i.batch_id,csv:i.csv,column_map:i.column_map})});
-  alert(`Imported ${r.imported}. Skipped ${r.skipped}.`);
-  await boot(); go('members');
+  await boot();
+  // A bad import is the fastest way to lose a church's trust. It MUST be undoable,
+  // and the undo must be offered right now — not buried in a settings page they
+  // will never find at 11pm when they realise the columns were shifted by one.
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal"
+      style="max-width:460px;text-align:center">
+    <div style="width:56px;height:56px;border-radius:50%;background:var(--brand-soft);
+      display:flex;align-items:center;justify-content:center;margin:0 auto 18px">
+      <i class="ti ti-check" style="font-size:30px;color:var(--brand-dk)"></i></div>
+    <div class="h" style="font-size:21px;font-weight:600">Imported ${r.imported}</div>
+    <div class="muted" style="margin:8px 0 22px;line-height:1.75">
+      ${r.skipped?`${r.skipped} row${r.skipped===1?'':'s'} skipped. `:''}
+      Check a few records now. <b style="color:var(--ink)">If the columns went in wrong,
+      undo it — nothing is destroyed.</b></div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-o" style="flex:1;color:var(--bad);border-color:var(--bad-soft)"
+        onclick="revertImport('${i.batch_id}',${r.imported})">Undo this import</button>
+      <button class="btn" style="flex:1" onclick="close_();go('members')">Looks right</button>
+    </div>
+  </div></div>`;
+}
+async function revertImport(batchId,n){
+  if(!confirm(`Undo this import?\n\nAll ${n} members it created will be archived. `
+    +`Nothing is destroyed — they can be brought back.`))return;
+  const r=await api(`/api/import/${batchId}/revert`,{method:'POST'});
+  close_(); await boot();
+  alert(`Reverted. ${r.reverted} record${r.reverted===1?'':'s'} archived.`);
+  go('import');
 }
 
 
@@ -1798,228 +1864,6 @@ async function saveCare(id){
     close_(); go('care');
   }catch(e){ $('#kerr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
 }
-
-/* ============================== MESSAGES ============================= */
-async function viewMsgs(){
-  const [msgs,segs,tpls,wallet]=await Promise.all([
-    api('/api/notify/messages').catch(()=>[]),
-    api('/api/notify/segments').catch(()=>[]),
-    api('/api/notify/templates').catch(()=>[]),
-    api('/api/notify/wallet').catch(()=>[])]);
-  const sms=(wallet.find(w=>w.credit_type==='sms')||{}).balance||0;
-  head('Messages', `${Number(sms).toLocaleString()} SMS credits`,
-    `<button class="btn btn-o" onclick="topup()">Top up</button>
-     <button class="btn" onclick="messageAll()">Compose</button>`);
-  $('#view').innerHTML=`
-   ${Number(sms)<50?`<div class="card" style="margin-bottom:16px;border-left:3px solid var(--warn)">
-     <div style="display:flex;align-items:center;gap:14px">
-       <i class="ti ti-alert-triangle" style="font-size:26px;color:var(--warn)"></i>
-       <div style="flex:1"><div style="font-weight:600;color:var(--ink)">Low on credit</div>
-         <div class="muted">Messages will not send. Top up before Sunday.</div></div>
-       <button class="btn" onclick="topup()">Top up</button></div>
-   </div>`:''}
-
-   <div class="g2" style="margin-bottom:16px">
-     <div class="card">
-       <div class="ch"><i class="ti ti-users-group"></i><h3>Who you can send to</h3>
-         <span class="r">${segs.length}</span></div>
-       <div class="muted" style="margin-bottom:14px;line-height:1.7">
-         A segment is a living list — "everyone away 3 weeks with a phone" recalculates itself
-         every time you open it.</div>
-       ${segs.map(sg=>`<div class="li">
-         <div class="g" style="background:var(--brand)"><i class="ti ti-filter"></i></div>
-         <div style="flex:1;min-width:0">
-           <div style="font-weight:600;color:var(--ink)">${esc(sg.name)}</div>
-           <div class="muted">${sg.people} ${sg.people===1?'person':'people'}</div></div>
-         <button class="btn btn-o" onclick="compose('${sg.id}')">Message</button>
-       </div>`).join('')||'<div class="muted">No segments yet.</div>'}
-       <div class="sect">New segment</div>
-       <div style="display:flex;gap:9px;flex-wrap:wrap">
-         <input id="sg_n" placeholder="Away 3 weeks" style="flex:2;min-width:150px">
-         <select id="sg_f" style="flex:1;min-width:150px">
-           <option value='{"absent_weeks":3,"has_phone":true}'>Away 3+ weeks</option>
-           <option value='{"absent_weeks":6,"has_phone":true}'>Away 6+ weeks</option>
-           <option value='{"never_attended":true,"has_phone":true}'>Never attended</option>
-           <option value='{"stage":"first_timer","has_phone":true}'>First timers</option>
-           <option value='{"stage":"worker","has_phone":true}'>Workers</option>
-           <option value='{"has_phone":true}'>Everyone reachable</option>
-         </select>
-         <button class="btn" onclick="addSeg()">Add</button>
-       </div>
-     </div>
-
-     <div class="card">
-       <div class="ch"><i class="ti ti-template"></i><h3>Templates</h3>
-         <span class="r">${tpls.length}</span></div>
-       ${tpls.map(t=>`<div class="li" onclick="compose(null,'${t.id}')" style="cursor:pointer">
-         <div class="g" style="background:var(--good)"><i class="ti ti-message-2"></i></div>
-         <div style="flex:1;min-width:0">
-           <div style="font-weight:600;color:var(--ink)">${esc(t.name)}</div>
-           <div class="muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-             ${esc(t.body.slice(0,58))}…</div></div>
-         <i class="ti ti-chevron-right" style="color:var(--faint)"></i>
-       </div>`).join('')||'<div class="muted">None. Run migration 007.</div>'}
-     </div>
-   </div>
-
-   <div class="card">
-     <div class="ch"><i class="ti ti-send"></i><h3>Sent</h3><span class="r">${msgs.length}</span></div>
-     ${msgs.length?`<table><thead><tr>
-       <th>Message</th><th>To</th><th>Sent</th><th>Held back</th><th>Cost</th><th>Status</th>
-     </tr></thead><tbody>
-     ${msgs.map(m=>`<tr onclick="msgDetail('${m.id}')">
-       <td><div style="font-weight:600;color:var(--ink);max-width:280px;overflow:hidden;
-         text-overflow:ellipsis;white-space:nowrap">${esc(m.body.slice(0,60))}</div>
-         <div class="muted" style="font-size:12px">${m.encoding} · ${m.units_each} unit${m.units_each===1?'':'s'} each</div></td>
-       <td class="muted">${esc(m.segment_name||m.total_targets+' people')}</td>
-       <td class="num" style="color:var(--ink)">${m.sent_count}</td>
-       <td class="${m.suppressed?'num':'muted'}" style="color:${m.suppressed?'var(--warn)':''}">${m.suppressed}</td>
-       <td class="num muted">₦${Number(m.estimated_cost).toLocaleString()}</td>
-       <td><span class="tag ${m.status==='sent'?'t-g':m.status==='draft'?'t-w':m.status==='failed'?'t-r':'t-b'}">${m.status}</span></td>
-     </tr>`).join('')}</tbody></table>`
-     :'<div class="muted">Nothing sent yet.</div>'}
-   </div>`;
-}
-
-async function addSeg(){
-  const n=$('#sg_n').value.trim(); if(!n) return;
-  await api('/api/notify/segments',{method:'POST',
-    body:JSON.stringify({name:n, filter:JSON.parse($('#sg_f').value)})});
-  go('messages');
-}
-async function topup(){
-  const n=prompt('How many SMS credits?','1000'); if(!n) return;
-  await api('/api/notify/wallet/topup',{method:'POST',
-    body:JSON.stringify({credit_type:'sms', amount:Number(n)})});
-  go('messages');
-}
-
-async function compose(segId,tplId){
-  const [segs,tpls]=await Promise.all([
-    api('/api/notify/segments'), api('/api/notify/templates')]);
-  const tpl = tplId ? tpls.find(t=>t.id===tplId) : null;
-  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
-    <div class="h" style="font-size:22px;font-weight:500">Compose</div>
-    <div class="muted" style="margin-bottom:22px">
-      Nothing is sent until you press send — and you will see exactly who is being held back,
-      and why, before you do.</div>
-    <div id="merr"></div>
-    <div class="gg2">
-      <div class="field"><label>Send to</label><select id="m_seg">
-        ${segs.map(s=>`<option value="${s.id}" ${s.id===segId?'selected':''}>${esc(s.name)} (${s.people})</option>`).join('')}
-      </select></div>
-      <div class="field"><label>Template</label><select id="m_tpl" onchange="useTpl()">
-        <option value="">— write it myself —</option>
-        ${tpls.map(t=>`<option value="${t.id}" ${t.id===tplId?'selected':''}
-          data-body="${esc(t.body)}">${esc(t.name)}</option>`).join('')}
-      </select></div>
-    </div>
-    <div class="field"><label>Message</label>
-      <textarea id="m_body" rows="5" oninput="cnt()" style="font-family:var(--text);font-size:14px;
-        padding:12px;border:1px solid var(--line);border-radius:8px;width:100%;resize:vertical"
-      >${esc(tpl?tpl.body:'')}</textarea>
-    </div>
-    <div id="m_cnt"></div>
-    <div class="muted" style="margin-top:10px;line-height:1.7">
-      <b style="color:var(--ink)">{{first_name}}</b> · <b style="color:var(--ink)">{{church}}</b>
-      · <b style="color:var(--ink)">{{service}}</b> are filled in per person.</div>
-    <div id="m_prev"></div>
-    <div style="display:flex;gap:12px;margin-top:24px">
-      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
-      <button class="btn" style="flex:2" onclick="doCompose()">Check before sending</button>
-    </div>
-  </div></div>`;
-  cnt();
-}
-function useTpl(){
-  const o=$('#m_tpl').selectedOptions[0];
-  if(o&&o.dataset.body){ $('#m_body').value=o.dataset.body; cnt(); }
-}
-async function cnt(){
-  const body=$('#m_body').value;
-  if(!body){ $('#m_cnt').innerHTML=''; return; }
-  const c=await api('/api/notify/count',{method:'POST',body:JSON.stringify({body})});
-  const bad=c.encoding==='UCS-2';
-  $('#m_cnt').innerHTML=`
-    <div style="background:${bad?'var(--warn-soft)':'var(--good-soft)'};border-radius:9px;
-         padding:13px 15px;display:flex;align-items:center;gap:14px">
-      <i class="ti ti-${bad?'alert-triangle':'circle-check'}"
-         style="font-size:22px;color:${bad?'var(--warn)':'var(--good)'}"></i>
-      <div style="flex:1">
-        <div style="font-weight:600;color:${bad?'var(--warn)':'var(--good)'}">
-          ${c.chars} characters · ${c.encoding} · <b>${c.units} SMS per person</b></div>
-        ${bad?`<div style="font-size:12px;color:var(--warn);line-height:1.6;margin-top:3px">
-          Broken by <b>${c.offenders.map(esc).join(' ')}</b> — these force 70 characters per SMS
-          instead of 160. <b>This message costs ${c.units}× what it should.</b>
-          A curly quote pasted from Word is usually the culprit.</div>`
-        :`<div style="font-size:12px;color:var(--good)">Fits the cheap encoding.</div>`}
-      </div>
-    </div>`;
-}
-async function doCompose(){
-  const body=$('#m_body').value.trim();
-  if(!body){$('#merr').innerHTML='<div class="err">Write something.</div>';return}
-  try{
-    const r=await api('/api/notify/compose',{method:'POST',
-      body:JSON.stringify({channel:'sms', body, segment_id:$('#m_seg').value})});
-    const B=r.breakdown||{};
-    const why={consent:'no consent',deceased:'deceased',frequency_cap:'already had 3 this week',
-      quiet_hours:'quiet hours',no_number:'no phone number',bounced:'number bounced'};
-    $('#m_prev').innerHTML=`
-      <div class="kpis" style="margin-top:18px">
-        <div class="kpi acc"><div class="l">Will send</div><div class="v">${r.sendable}</div></div>
-        <div class="kpi ${r.suppressed?'warn':''}"><div class="l">Held back</div>
-          <div class="v">${r.suppressed}</div></div>
-        <div class="kpi"><div class="l">Cost</div>
-          <div class="v" style="font-size:22px;padding-top:6px">₦${Number(r.cost).toLocaleString()}</div></div>
-      </div>
-      ${r.suppressed?`<div class="sect">Why ${r.suppressed} will not receive it</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          ${Object.entries(B).map(([k,v])=>`<span class="tag t-w">${v} — ${why[k]||k}</span>`).join('')}
-        </div>`:''}
-      <button class="btn" style="width:100%;margin-top:20px"
-        onclick="doSend('${r.message.id}',${r.sendable})">
-        Send to ${r.sendable} ${r.sendable===1?'person':'people'} · ₦${Number(r.cost).toLocaleString()}</button>`;
-  }catch(e){ $('#merr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
-}
-async function doSend(id,n){
-  if(!confirm(`Send to ${n} people?`))return;
-  try{
-    await api('/api/notify/send/'+id,{method:'POST'});
-    close_(); go('messages');
-  }catch(e){
-    $('#merr').innerHTML=`<div class="err">${esc(e.message)}</div>`;
-  }
-}
-async function msgDetail(id){
-  const m=await api('/api/notify/messages/'+id);
-  const why={consent:'no consent',deceased:'deceased',frequency_cap:'cap reached',
-    quiet_hours:'quiet hours',no_number:'no number',bounced:'bounced',no_credit:'no credit'};
-  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
-    <div class="h" style="font-size:20px;font-weight:500">Message</div>
-    <div style="background:var(--brand-wash);border-radius:9px;padding:16px;margin:16px 0;
-         font-size:14px;line-height:1.7">${esc(m.body)}</div>
-    <div class="kpis">
-      <div class="kpi acc"><div class="l">Sent</div><div class="v">${m.sent_count}</div></div>
-      <div class="kpi ${m.suppressed?'warn':''}"><div class="l">Held back</div><div class="v">${m.suppressed}</div></div>
-      <div class="kpi ${m.failed_count?'bad':''}"><div class="l">Failed</div><div class="v">${m.failed_count}</div></div>
-    </div>
-    <div class="sect">Everyone</div>
-    <div style="max-height:320px;overflow-y:auto">
-      ${(m.recipients||[]).map(r=>`<div class="li">
-        <div class="av">${ini(r.name)}</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:600;color:var(--ink)">${esc(r.name)}</div>
-          <div class="muted">${esc(r.address||'—')}${r.used_fallback?' (2nd SIM)':''}</div></div>
-        <span class="tag ${r.status==='delivered'?'t-g':r.status==='sent'?'t-b':
-          r.status==='suppressed'?'t-w':'t-r'}">
-          ${r.suppressed_reason?why[r.suppressed_reason]||r.suppressed_reason:r.status}</span>
-      </div>`).join('')}
-    </div>
-    <button class="btn btn-o" style="width:100%;margin-top:22px" onclick="close_()">Close</button>
-  </div></div>`;
-}
-
 
 /* ============================== MESSAGES ============================= */
 let PREP=null;
@@ -2816,6 +2660,156 @@ function showPeople(title, people, onMsg, listId){
 async function rmFromList(listId, personId, name){
   await api(`/api/lists/${listId}/members/${personId}`,{method:'DELETE'});
   openList(listId, name);
+}
+
+
+/* =============================== FAMILIES ============================ */
+/**
+ * Churches think in FAMILIES, not individuals.
+ *
+ * "The Okafor family" is how a pastor holds a congregation in his head. A
+ * bereavement is a family event. A dedication is a family event. Sending three
+ * separate texts to a husband, wife, and daughter about the same funeral is
+ * how you look like a machine.
+ *
+ * The `households` table has existed since Phase 0 with no way to reach it.
+ */
+async function viewFamilies(){
+  const fams = await api('/api/church/households').catch(()=>[]);
+  const orphans = MEMBERS.filter(m=>!m.household_id);
+  head('Families', `${fams.length} household${fams.length===1?'':'s'}`,
+    `<button class="btn" onclick="newFamily()">New family</button>`);
+
+  $('#view').innerHTML=`
+   <div class="card" style="margin-bottom:16px">
+     <div class="muted" style="line-height:1.8">
+       Churches think in <b style="color:var(--ink)">families</b>, not individuals.
+       A bereavement is a family event. A dedication is a family event. Grouping
+       them means one message about a funeral, not three.</div>
+   </div>
+
+   <div class="card">
+     <div class="ch"><i class="ti ti-home-heart"></i><h3>Households</h3>
+       <span class="r">${fams.length}</span></div>
+     ${fams.length?fams.map(f=>`<div class="li">
+       <div class="g" style="background:var(--brand)"><i class="ti ti-home-heart"></i></div>
+       <div style="flex:1;min-width:0;cursor:pointer" onclick="openFamily('${f.id}','${esc(f.name)}')">
+         <div style="font-weight:600;color:var(--ink)">${esc(f.name)}</div>
+         <div class="muted">${f.members} ${f.members===1?'person':'people'}${
+           f.head?' · '+esc(f.head):''}${f.address?' · '+esc(f.address):''}</div></div>
+       ${f.members?`<button class="btn" style="padding:7px 13px;font-size:13px"
+         onclick="msgFamily('${f.id}','${esc(f.name)}')">Message</button>`:''}
+       <i class="ti ti-chevron-right" style="color:var(--faint)"></i>
+     </div>`).join('')
+     :'<div class="muted">No families yet. Group members who live together.</div>'}
+   </div>
+
+   ${orphans.length?`<div class="card" style="margin-top:16px">
+     <div class="ch"><i class="ti ti-user" style="color:var(--warn)"></i>
+       <h3>Not in a family</h3><span class="r">${orphans.length}</span></div>
+     <div class="muted" style="line-height:1.75;margin-bottom:14px">
+       These members are not linked to anyone. Some genuinely live alone — but
+       spouses and children filed separately means a bereavement text to a widow
+       and, separately, to her late husband.</div>
+     <div style="display:flex;gap:7px;flex-wrap:wrap">
+       ${orphans.slice(0,30).map(m=>`<span class="tag t-n" style="cursor:pointer"
+         onclick="openMember('${m.id}')">${esc(m.full_name)}</span>`).join('')}
+       ${orphans.length>30?`<span class="muted">and ${orphans.length-30} more</span>`:''}
+     </div>
+   </div>`:''}`;
+}
+
+function newFamily(){
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal"
+      style="max-width:460px">
+    <div class="h" style="font-size:22px;font-weight:500">New family</div>
+    <div class="muted" style="margin-bottom:22px;line-height:1.75">
+      Name it as the church says it: <b style="color:var(--ink)">"The Okonkwo Family"</b>.
+      Add people to it afterwards.</div>
+    <div id="ferr2"></div>
+    <div class="field"><label>Family name</label>
+      <input id="fa_name" placeholder="The Okonkwo Family"></div>
+    <div class="field"><label>Address</label><input id="fa_addr"></div>
+    <div class="field"><label>Area — used for cell assignment</label>
+      <input id="fa_area" placeholder="Ogba"></div>
+    <div style="display:flex;gap:12px;margin-top:22px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
+      <button class="btn" style="flex:2" onclick="saveFamily()">Create</button>
+    </div>
+  </div></div>`;
+  setTimeout(()=>$('#fa_name')&&$('#fa_name').focus(),50);
+}
+async function saveFamily(){
+  const name=$('#fa_name').value.trim();
+  if(!name){$('#ferr2').innerHTML='<div class="err">A name.</div>';return}
+  try{
+    await api('/api/households',{method:'POST',body:JSON.stringify({
+      name, address:$('#fa_addr').value.trim()||null,
+      area:$('#fa_area').value.trim()||null })});
+    close_(); go('families');
+  }catch(e){ $('#ferr2').innerHTML=`<div class="err">${esc(e.message)}</div>` }
+}
+
+async function openFamily(id,name){
+  const f=await api('/api/households/'+id);
+  const inFam=new Set((f.members||[]).map(p=>p.id));
+  const ROLE=[['head','Head'],['spouse','Spouse'],['child','Child'],
+              ['dependent','Dependent'],['other','Other']];
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">
+      <div class="av" style="width:46px;height:46px;font-size:16px">
+        <i class="ti ti-home-heart" style="font-size:22px"></i></div>
+      <div style="flex:1;min-width:0">
+        <div class="h" style="font-size:22px;font-weight:500">${esc(f.name)}</div>
+        <div class="muted">${esc(f.address||'no address')}${f.area?' · '+esc(f.area):''}</div></div>
+    </div>
+
+    <button class="btn" style="width:100%;margin:18px 0 22px"
+      onclick="msgFamily('${id}','${esc(f.name)}')">
+      <i class="ti ti-message-2" style="vertical-align:-2px"></i> Message the family</button>
+
+    <div class="sect">Who is in it — ${(f.members||[]).length}</div>
+    ${(f.members||[]).map(p=>`<div class="li">
+      <div class="av" onclick="close_();openMember('${p.id}')" style="cursor:pointer">${ini(p.name)}</div>
+      <div style="flex:1;min-width:0;cursor:pointer" onclick="close_();openMember('${p.id}')">
+        <div style="font-weight:600;color:var(--ink)">${esc(p.name)}</div>
+        <div class="muted">${p.date_of_birth
+          ? new Date(p.date_of_birth).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})
+          : ''}</div></div>
+      <span class="tag ${p.role==='head'?'t-b':'t-n'}">${esc(p.role||'member')}</span>
+      <i class="ti ti-x" style="color:var(--faint);cursor:pointer;font-size:18px"
+         onclick="rmFamily('${p.id}','${id}','${esc(f.name)}')"></i>
+    </div>`).join('')||'<div class="muted">Nobody yet.</div>'}
+
+    <div class="sect">Add someone</div>
+    <div style="display:flex;gap:10px">
+      <select id="fa_p" style="flex:2">
+        ${MEMBERS.filter(m=>!inFam.has(m.id)).map(m=>
+          `<option value="${m.id}">${esc(m.full_name)}</option>`).join('')}
+      </select>
+      <select id="fa_r" style="flex:1">
+        ${ROLE.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}
+      </select>
+      <button class="btn" onclick="addFamily('${id}','${esc(f.name)}')">Add</button>
+    </div>
+
+    <button class="btn btn-o" style="width:100%;margin-top:24px" onclick="close_()">Close</button>
+  </div></div>`;
+}
+async function addFamily(id,name){
+  await api(`/api/church/households/${id}/members`,{method:'POST',
+    body:JSON.stringify({person_id:$('#fa_p').value, role:$('#fa_r').value})});
+  await boot(); openFamily(id,name);
+}
+async function rmFamily(personId,id,name){
+  await api(`/api/church/households/members/${personId}`,{method:'DELETE'});
+  await boot(); openFamily(id,name);
+}
+async function msgFamily(id,name){
+  const f=await api('/api/households/'+id);
+  if(!(f.members||[]).length){ alert('Nobody in that family yet.'); return; }
+  close_();
+  messageThese(f.members.map(p=>p.id), name);
 }
 
 (async()=>{
