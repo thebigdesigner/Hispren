@@ -51,6 +51,39 @@ export function registerMemberRoutes(app: FastifyInstance) {
       return r ? { archived: true } : reply.code(404).send({ error: "not_found" });
     });
 
+  /**
+   * A member's history. Two questions a pastor actually asks when he opens
+   * someone's record: "when did she last come?" and "has anyone contacted her?"
+   * Neither was answerable until now.
+   */
+  app.get<{ Params: { id: string } }>("/api/members/:id/history", auth, async (req) =>
+    tenantTx(req, async (tx) => {
+      const msgs = await tx.query(
+        `SELECT m.channel, m.status, m.suppressed_by, m.body, m.queued_at, m.sent_at,
+                c.name AS campaign
+           FROM messages m LEFT JOIN campaigns c ON c.id = m.campaign_id
+          WHERE m.person_id = $1
+          ORDER BY m.queued_at DESC LIMIT 20`, [req.params.id]);
+
+      const att = await tx.query(
+        `SELECT s.session_date, sv.name AS service, a.method, a.recorded_at
+           FROM attendance a
+           JOIN attendance_sessions s ON s.id = a.session_id
+           JOIN services sv           ON sv.id = s.service_id
+          WHERE a.person_id = $1
+          ORDER BY s.session_date DESC LIMIT 20`, [req.params.id]);
+
+      const stages = await tx.query(
+        `SELECT h.changed_at, f.label AS from_stage, t.label AS to_stage
+           FROM person_stage_history h
+           LEFT JOIN journey_stages f ON f.id = h.from_stage_id
+           LEFT JOIN journey_stages t ON t.id = h.to_stage_id
+          WHERE h.person_id = $1
+          ORDER BY h.changed_at DESC LIMIT 10`, [req.params.id]);
+
+      return { messages: msgs.rows, attendance: att.rows, stages: stages.rows };
+    }));
+
   // ---- QR identity ---------------------------------------------------------
   app.get<{ Params: { id: string } }>("/api/members/:id/qr", auth, async (req, reply) => {
     const q = await tenantTx(req, (tx) => svc.getQr(tx, req.params.id));

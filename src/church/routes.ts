@@ -47,6 +47,26 @@ export function registerChurchRoutes(app: FastifyInstance) {
     "/api/church/groups/:id/members/:personId", staff, async (req) =>
       tenantTx(req, (tx) => ch.removeFromGroup(tx, req.params.id, req.params.personId)));
 
+  /** Every person id in a group AND everything beneath it — for messaging a cell. */
+  app.get<{ Params: { id: string } }>("/api/church/groups/:id/people", auth, async (req) =>
+    tenantTx(req, async (tx) => {
+      const { rows } = await tx.query(`
+        WITH RECURSIVE sub AS (
+          SELECT id FROM groups WHERE id = $1
+          UNION ALL
+          SELECT g.id FROM groups g JOIN sub ON g.parent_id = sub.id
+        )
+        SELECT DISTINCT p.id,
+               trim(coalesce(p.first_name,'')||' '||coalesce(p.last_name,'')) AS name
+          FROM persons p
+          LEFT JOIN group_memberships gm
+                 ON gm.person_id = p.id AND gm.left_at IS NULL
+         WHERE p.archived_at IS NULL
+           AND (p.home_group_id IN (SELECT id FROM sub)
+                OR gm.group_id   IN (SELECT id FROM sub))`, [req.params.id]);
+      return rows;
+    }));
+
   // ---- calendar: recurring services AND one-off events ----------------------
   app.get("/api/church/calendar", auth, async (req) =>
     tenantTx(req, (tx) => ch.listCalendar(tx)));
