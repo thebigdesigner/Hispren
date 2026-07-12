@@ -47,4 +47,12 @@ export async function registerSchedules(): Promise<void> {
   await jobsQueue.add("billing.metering.snapshot", {}, daily(2));
   await jobsQueue.add("billing.dunning.sweep", {}, daily(8));
   await jobsQueue.add("sessions.purge", {}, daily(3));
+
+  // Reminders. Every one DRAFTS a message and stops — a human presses send.
+  await jobsQueue.add("reminders.birthday", {}, daily(7));      // 07:00 WAT
+  await jobsQueue.add("reminders.followups", {}, daily(6));     // before the office opens
+  await jobsQueue.add("reminders.missed", {},
+    { repeat: { pattern: "0 9 * * 1", tz: "Africa/Lagos" } });  // Monday 09:00
+  await jobsQueue.add("reminders.service", {},
+    { repeat: { pattern: "0 18 * * 6", tz: "Africa/Lagos" } }); // Saturday 18:00
 }

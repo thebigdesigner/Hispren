@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:isolation": "vitest run tests/isolation.test.ts",
     "smoke": "node scripts/smoke.js",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "check": "node scripts/check-handlers.js && node -e \"const f=require('fs');for(const p of f.readdirSync('public').filter(x=>x.endsWith('.html'))){const h=f.readFileSync('public/'+p,'utf8');const a=h.indexOf('<script>');if(a<0)continue;f.writeFileSync('/tmp/c.js',h.slice(a+8,h.lastIndexOf('</script>')));require('child_process').execSync('node --check /tmp/c.js');console.log(p+' ok')}\""
   },
   "dependencies": {
     "@fastify/cookie": "^9.3.1",

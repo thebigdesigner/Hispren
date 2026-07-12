@@ -175,6 +175,9 @@ tr.flag:hover{background:#F7DFDF}
     <div class="nav"    data-v="attendance" onclick="go('attendance')"><i class="ti ti-qrcode"></i>Attendance</div>
     <div class="nav"    data-v="groups"     onclick="go('groups')"><i class="ti ti-sitemap"></i>Groups</div>
     <div class="nav"    data-v="calendar"   onclick="go('calendar')"><i class="ti ti-calendar"></i>Calendar</div>
+    <div class="nav"    data-v="followups"  onclick="go('followups')"><i class="ti ti-phone-call"></i>Follow-ups<span id="tBadge"></span></div>
+    <div class="nav"    data-v="care"       onclick="go('care')"><i class="ti ti-heart-handshake"></i>Pastoral care</div>
+    <div class="nav"    data-v="messages"   onclick="go('messages')"><i class="ti ti-message-2"></i>Messages</div>
     <div class="nav"    data-v="reports"    onclick="go('reports')"><i class="ti ti-chart-line"></i>Reports</div>
     <div class="slab">Data</div>
     <div class="nav"    data-v="duplicates" onclick="go('duplicates')"><i class="ti ti-copy"></i>Duplicates<span id="dBadge"></span></div>
@@ -202,7 +205,7 @@ tr.flag:hover{background:#F7DFDF}
 <div id="modal"></div>
 
 <script>
-let CHURCH='', ME=null, DUPES=[], MEMBERS=[], STAGES=[], GROUPS=[], STATES=[], FIELDS=[];
+let CHURCH='', ME=null, DUPES=[], MEMBERS=[], STAGES=[], GROUPS=[], STATES=[], FIELDS=[], USERS=[], TASKS=[];
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ini=n=>(n||'?').split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase();
@@ -233,11 +236,16 @@ async function boot(){
   $('#pName').textContent=ME.tenant.name; $('#pAv').textContent=ini(ME.tenant.name);
   MEMBERS=(await api('/api/members?limit=300')).members;
   DUPES=await api('/api/duplicates').catch(()=>[]);
-  [STAGES,GROUPS,STATES,FIELDS]=await Promise.all([
+  [STAGES,GROUPS,STATES,FIELDS,USERS,TASKS]=await Promise.all([
     api('/api/stages').catch(()=>[]),
     api('/api/groups').catch(()=>[]),
     api('/api/states').catch(()=>[]),
-    api('/api/church/fields').catch(()=>[])]);
+    api('/api/church/fields').catch(()=>[]),
+    api('/api/users').catch(()=>[]),
+    api('/api/tasks').catch(()=>[])]);
+  const od=TASKS.filter(t=>t.overdue).length;
+  $('#tBadge').outerHTML = od
+    ? `<span class="n" id="tBadge">${od}</span>` : '<span id="tBadge"></span>';
   $('#dBadge').outerHTML=DUPES.length?`<span class="n" id="dBadge">${DUPES.length}</span>`:'<span id="dBadge"></span>';
   go('home');
 }
@@ -245,8 +253,8 @@ function head(t,s,a=''){ $('#hTitle').textContent=t; $('#hSub').textContent=s; $
 function go(v){
   document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('on',n.dataset.v===v));
   ({home:viewHome,members:viewMembers,attendance:viewAtt,groups:viewGroups,calendar:viewCal,
-    reports:viewReports,duplicates:viewDupes,import:viewImport,export:viewExport,
-    settings:viewSettings})[v]();
+    followups:viewTasks,care:viewCare,messages:viewMsgs,reports:viewReports,
+    duplicates:viewDupes,import:viewImport,export:viewExport,settings:viewSettings})[v]();
 }
 
 /* ============================== OVERVIEW ============================== */
@@ -285,17 +293,21 @@ function viewHome(){
   <div class="g2">
    <div class="col">
     <div class="card">
-      <div class="ch"><i class="ti ti-phone-call"></i><h3>Needs a call</h3>
-        <span class="r">${call.length}</span></div>
-      ${call.slice(0,5).map(m=>`
-        <div class="li" onclick="openMember('${m.id}')" style="cursor:pointer">
-          <div class="av">${ini(m.full_name)}</div>
+      <div class="ch"><i class="ti ti-phone-call"></i><h3>Follow-ups</h3>
+        <span class="r">${TASKS.length} open</span></div>
+      ${TASKS.slice(0,5).map(t=>`
+        <div class="li" onclick="go('followups')" style="cursor:pointer">
+          <div class="av">${ini(t.subject_name||t.title)}</div>
           <div style="flex:1;min-width:0">
-            <div style="font-weight:600;color:var(--ink)">${esc(m.full_name)}</div>
-            <div class="muted">${esc(m.stage_label)} · ${esc(m.home_group_name||'no group')}</div>
+            <div style="font-weight:600;color:var(--ink)">${esc(t.title)}</div>
+            <div class="muted">${esc(t.owner||'unassigned')}${t.due_at
+              ?' · due '+new Date(t.due_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'}):''}</div>
           </div>
-          <span class="tag ${m.phone?'t-w':'t-n'}">${m.phone?'Call':'No phone'}</span>
-        </div>`).join('')||'<div class="muted">Nobody is waiting.</div>'}
+          <span class="tag ${t.overdue?'t-r':'t-w'}">${t.overdue?'Overdue':'Open'}</span>
+        </div>`).join('')||`<div class="muted">No open follow-ups.
+          ${call.length?`<b style="color:var(--ink)">${call.length} first-timer${call.length===1?'':'s'}
+          have nobody assigned</b> — <span style="color:var(--brand);cursor:pointer"
+          onclick="genTasks()">create the tasks</span>.`:''}</div>`}
     </div>
 
     <div class="card">
@@ -423,6 +435,12 @@ async function openMember(id){
       <button class="btn btn-o" style="margin-top:14px" onclick="editHealth('${id}')">
         ${h?'Update':'Record'} genotype</button>`:''}
 
+    <div class="sect">Consent — NDPR</div>
+    <div class="muted" style="line-height:1.75;margin-bottom:12px">
+      A message is never sent to someone who has not agreed to receive it. Revoking consent is
+      instant and permanent until they grant it again — and every change is recorded.</div>
+    <div id="consentBox">loading…</div>
+
     ${qr?`<div class="sect">QR identity</div>
       <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
         <img alt="QR code" width="110" height="110" style="border-radius:9px;border:1px solid var(--line)"
@@ -438,6 +456,14 @@ async function openMember(id){
         onclick="archive('${id}','${esc(m.full_name)}')">Archive</button>
     </div>
   </div></div>`;
+  loadConsent(id);
+}
+
+/* ------------------------------ HELPERS ------------------------------- */
+function close_(){ $('#modal').innerHTML=''; }
+async function rot(id){
+  await api(`/api/members/${id}/qr/rotate`,{method:'POST'});
+  openMember(id);
 }
 
 /* ---------------------------- EDIT A MEMBER --------------------------- */
@@ -1411,6 +1437,422 @@ async function delField(id,label){
     +`and they reappear.`))return;
   await api('/api/church/fields/'+id,{method:'DELETE'});
   go('settings');
+}
+
+
+/* ============================== FOLLOW-UPS =========================== */
+async function viewTasks(){
+  TASKS=await api('/api/tasks');
+  const done=await api('/api/tasks?status=done').catch(()=>[]);
+  const overdue=TASKS.filter(t=>t.overdue);
+  head('Follow-ups', `${TASKS.length} open · ${overdue.length} overdue`,
+    `<button class="btn btn-o" onclick="genTasks()">Sweep first-timers</button>
+     <button class="btn" onclick="editTask()">New task</button>`);
+  const row=t=>`<tr onclick="editTask('${t.id}')">
+    <td><div style="display:flex;align-items:center;gap:12px">
+      <div style="width:22px;height:22px;border-radius:5px;border:2px solid ${
+        t.status==='done'?'var(--good)':'var(--line)'};background:${
+        t.status==='done'?'var(--good)':'#fff'};display:flex;align-items:center;
+        justify-content:center;flex-shrink:0" onclick="event.stopPropagation();
+        doneTask('${t.id}','${t.status}')">
+        ${t.status==='done'?'<i class="ti ti-check" style="color:#fff;font-size:14px"></i>':''}
+      </div>
+      <div><div style="font-weight:600;color:var(--ink);${t.status==='done'
+        ?'text-decoration:line-through;color:var(--muted)':''}">${esc(t.title)}</div>
+      ${t.subject_phone?`<div class="muted" style="font-size:12px">${esc(t.subject_phone)}</div>`:''}</div>
+    </div></td>
+    <td class="muted">${esc(t.owner||'unassigned')}</td>
+    <td><span class="tag t-n">${esc(t.kind.replace('_',' '))}</span></td>
+    <td>${t.due_at?`<span class="${t.overdue?'tag t-r':'muted'}">${
+      new Date(t.due_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</span>`:'<span class="muted">—</span>'}</td>
+  </tr>`;
+  $('#view').innerHTML=`
+   <div class="kpis">
+     <div class="kpi ${overdue.length?'bad':'acc'}"><div class="l">Overdue</div>
+       <div class="v">${overdue.length}</div>
+       <div class="d" style="color:${overdue.length?'var(--bad)':'var(--muted)'}">
+         ${overdue.length?'Somebody is waiting':'Nothing late'}</div></div>
+     <div class="kpi"><div class="l">Open</div><div class="v">${TASKS.length}</div></div>
+     <div class="kpi"><div class="l">Done</div><div class="v">${done.length}</div></div>
+   </div>
+   <div class="card">
+     <div class="muted" style="line-height:1.8;margin-bottom:18px">
+       A follow-up is not a list — it has <b style="color:var(--ink)">an owner and a due date</b>.
+       Otherwise a first-timer sits there for six weeks looking urgent while everyone assumes
+       someone else rang. <b style="color:var(--ink)">The first 72 hours decide whether they come back.</b></div>
+     ${TASKS.length?`<table><thead><tr>
+       <th>Task</th><th>Owner</th><th>Kind</th><th>Due</th></tr></thead>
+       <tbody>${TASKS.map(row).join('')}</tbody></table>`
+     :`<div class="muted">Nothing open. <span style="color:var(--brand);cursor:pointer"
+        onclick="genTasks()">Sweep uncontacted first-timers into tasks</span>.</div>`}
+   </div>`;
+}
+async function genTasks(){
+  const r=await api('/api/tasks/generate',{method:'POST'});
+  alert(r.created ? `${r.created} follow-up task${r.created===1?'':'s'} created, due 72 hours after they visited.`
+    : 'Every first-timer already has a task.');
+  await boot(); go('followups');
+}
+async function doneTask(id,cur){
+  await api('/api/tasks/'+id,{method:'PATCH',
+    body:JSON.stringify({status:cur==='done'?'open':'done'})});
+  await boot(); go('followups');
+}
+async function editTask(id){
+  const t = id ? TASKS.find(x=>x.id===id)||{} : {};
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal"
+      style="max-width:520px">
+    <div class="h" style="font-size:22px;font-weight:500">${id?'Edit task':'New task'}</div>
+    <div class="muted" style="margin-bottom:24px">Give it an owner and a date, or it will not happen.</div>
+    <div id="terr"></div>
+    <div class="field"><label>Task</label><input id="t_title" value="${esc(t.title||'')}"
+      placeholder="Call Blessing Adeyemi"></div>
+    <div class="field"><label>About</label><select id="t_subj">
+      <option value="">—</option>
+      ${MEMBERS.map(m=>`<option value="${m.id}" ${m.id===t.subject_id?'selected':''}>${esc(m.full_name)}</option>`).join('')}
+    </select></div>
+    <div class="gg2">
+      <div class="field"><label>Owner</label><select id="t_user">
+        <option value="">unassigned</option>
+        ${USERS.map(u=>`<option value="${u.id}" ${u.id===t.assigned_to_user?'selected':''}>${esc(u.full_name)}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Due</label>
+        <input id="t_due" type="date" value="${(t.due_at||'').slice(0,10)}"></div>
+    </div>
+    <div class="field"><label>Detail</label><input id="t_detail" value="${esc(t.detail||'')}"></div>
+    <div style="display:flex;gap:12px;margin-top:24px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
+      <button class="btn" style="flex:2" onclick="saveTask(${id?`'${id}'`:'null'})">Save</button>
+    </div>
+  </div></div>`;
+}
+async function saveTask(id){
+  const b={ title:$('#t_title').value.trim(), detail:$('#t_detail').value.trim()||null,
+    assigned_to_user:$('#t_user').value||null,
+    due_at:$('#t_due').value?$('#t_due').value+'T09:00:00Z':null,
+    kind:'follow_up' };
+  const sub=$('#t_subj').value;
+  if(sub){ b.subject_type='person'; b.subject_id=sub; }
+  if(!b.title){$('#terr').innerHTML='<div class="err">A title is required.</div>';return}
+  try{
+    if(id) await api('/api/tasks/'+id,{method:'PATCH',body:JSON.stringify(b)});
+    else    await api('/api/tasks',{method:'POST',body:JSON.stringify(b)});
+    close_(); await boot(); go('followups');
+  }catch(e){ $('#terr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
+}
+
+/* ============================ PASTORAL CARE ========================== */
+const CARE_KINDS=['prayer','counselling','hospital_visit','bereavement','benevolence','other'];
+async function viewCare(){
+  const care=await api('/api/care');
+  const overdue=care.filter(c=>c.overdue);
+  head('Pastoral care', `${care.length} open`,
+    `<button class="btn" onclick="editCare()">New request</button>`);
+  $('#view').innerHTML=`
+   <div class="kpis">
+     <div class="kpi ${overdue.length?'bad':'acc'}"><div class="l">Overdue</div>
+       <div class="v">${overdue.length}</div></div>
+     <div class="kpi"><div class="l">Open</div><div class="v">${care.length}</div></div>
+     ${CARE_KINDS.slice(0,2).map(k=>`<div class="kpi"><div class="l">${k.replace('_',' ')}</div>
+       <div class="v">${care.filter(c=>c.kind===k).length}</div></div>`).join('')}
+   </div>
+   <div class="card">
+     <div class="muted" style="line-height:1.8;margin-bottom:18px">
+       Prayer, counselling, hospital visits, bereavement, benevolence.
+       <b style="color:var(--ink)">This is the actual job</b> — a pastor cares about it more than
+       any dashboard. Confidential requests are visible only to pastors.</div>
+     ${care.length?`<table><thead><tr>
+       <th>Request</th><th>Person</th><th>Kind</th><th>Owner</th><th>Status</th></tr></thead>
+     <tbody>${care.map(c=>`<tr onclick="editCare('${c.id}')" class="${c.overdue?'flag':''}">
+       <td><div style="font-weight:600;color:var(--ink)">${esc(c.summary)}</div>
+         ${c.is_confidential?'<span class="tag t-r" style="margin-top:4px">confidential</span>':''}</td>
+       <td class="muted">${esc(c.person_name||'anonymous')}</td>
+       <td><span class="tag t-n">${esc(c.kind.replace('_',' '))}</span></td>
+       <td class="muted">${esc(c.owner||'unassigned')}</td>
+       <td><span class="tag ${c.status==='open'?'t-w':c.status==='resolved'?'t-g':'t-b'}">${esc(c.status)}</span></td>
+     </tr>`).join('')}</tbody></table>`
+     :'<div class="muted">Nothing open. Rare, and good.</div>'}
+   </div>`;
+}
+async function editCare(id){
+  let c={};
+  if(id){ const all=await api('/api/care'); c=all.find(x=>x.id===id)||{}; }
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal"
+      style="max-width:520px">
+    <div class="h" style="font-size:22px;font-weight:500">${id?'Care request':'New care request'}</div>
+    <div class="muted" style="margin-bottom:24px">Somebody needs a pastor. Give it an owner.</div>
+    <div id="kerr"></div>
+    <div class="field"><label>What is needed</label><input id="k_sum" value="${esc(c.summary||'')}"
+      placeholder="Hospital visit — Lagos General, ward 4"></div>
+    <div class="gg2">
+      <div class="field"><label>Kind</label><select id="k_kind">
+        ${CARE_KINDS.map(k=>`<option value="${k}" ${k===c.kind?'selected':''}>${k.replace('_',' ')}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Person</label><select id="k_p">
+        <option value="">anonymous</option>
+        ${MEMBERS.map(m=>`<option value="${m.id}" ${m.id===c.person_id?'selected':''}>${esc(m.full_name)}</option>`).join('')}
+      </select></div>
+    </div>
+    <div class="gg2">
+      <div class="field"><label>Owner</label><select id="k_u">
+        <option value="">unassigned</option>
+        ${USERS.map(u=>`<option value="${u.id}" ${u.id===c.assigned_to?'selected':''}>${esc(u.full_name)}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Due</label>
+        <input id="k_due" type="date" value="${(c.due_at||'').slice(0,10)}"></div>
+    </div>
+    ${id?`<div class="field"><label>Status</label><select id="k_st">
+      ${['open','assigned','in_progress','resolved','closed'].map(x=>
+        `<option value="${x}" ${x===c.status?'selected':''}>${x.replace('_',' ')}</option>`).join('')}
+    </select></div>`:''}
+    <div class="field"><label>Detail</label><input id="k_d" value="${esc(c.detail||'')}"></div>
+    <div style="background:var(--bad-soft);border-radius:9px;padding:14px;display:flex;gap:12px;
+         align-items:flex-start">
+      <input type="checkbox" id="k_conf" ${c.is_confidential?'checked':''}
+        style="width:18px;height:18px;margin-top:2px;flex-shrink:0">
+      <label for="k_conf" style="text-transform:none;letter-spacing:0;font-weight:400;
+        color:var(--bad);font-size:13px;line-height:1.7;margin:0;cursor:pointer">
+        <b>Confidential.</b> Only pastors see this. Counselling and bereavement usually should be.</label>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:24px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
+      <button class="btn" style="flex:2" onclick="saveCare(${id?`'${id}'`:'null'})">Save</button>
+    </div>
+  </div></div>`;
+}
+async function saveCare(id){
+  const b={ summary:$('#k_sum').value.trim(), kind:$('#k_kind').value,
+    person_id:$('#k_p').value||null, assigned_to:$('#k_u').value||null,
+    due_at:$('#k_due').value?$('#k_due').value+'T09:00:00Z':null,
+    detail:$('#k_d').value.trim()||null, is_confidential:$('#k_conf').checked };
+  if($('#k_st')) b.status=$('#k_st').value;
+  if(!b.summary){$('#kerr').innerHTML='<div class="err">Say what is needed.</div>';return}
+  try{
+    if(id) await api('/api/care/'+id,{method:'PATCH',body:JSON.stringify(b)});
+    else    await api('/api/care',{method:'POST',body:JSON.stringify(b)});
+    close_(); go('care');
+  }catch(e){ $('#kerr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
+}
+
+/* ============================== MESSAGES ============================= */
+async function viewMsgs(){
+  const [msgs,segs,tpls,wallet]=await Promise.all([
+    api('/api/notify/messages').catch(()=>[]),
+    api('/api/notify/segments').catch(()=>[]),
+    api('/api/notify/templates').catch(()=>[]),
+    api('/api/notify/wallet').catch(()=>[])]);
+  const sms=(wallet.find(w=>w.credit_type==='sms')||{}).balance||0;
+  head('Messages', `${Number(sms).toLocaleString()} SMS credits`,
+    `<button class="btn btn-o" onclick="topup()">Top up</button>
+     <button class="btn" onclick="compose()">Compose</button>`);
+  $('#view').innerHTML=`
+   ${Number(sms)<50?`<div class="card" style="margin-bottom:16px;border-left:3px solid var(--warn)">
+     <div style="display:flex;align-items:center;gap:14px">
+       <i class="ti ti-alert-triangle" style="font-size:26px;color:var(--warn)"></i>
+       <div style="flex:1"><div style="font-weight:600;color:var(--ink)">Low on credit</div>
+         <div class="muted">Messages will not send. Top up before Sunday.</div></div>
+       <button class="btn" onclick="topup()">Top up</button></div>
+   </div>`:''}
+
+   <div class="g2" style="margin-bottom:16px">
+     <div class="card">
+       <div class="ch"><i class="ti ti-users-group"></i><h3>Who you can send to</h3>
+         <span class="r">${segs.length}</span></div>
+       <div class="muted" style="margin-bottom:14px;line-height:1.7">
+         A segment is a living list — "everyone away 3 weeks with a phone" recalculates itself
+         every time you open it.</div>
+       ${segs.map(sg=>`<div class="li">
+         <div class="g" style="background:var(--brand)"><i class="ti ti-filter"></i></div>
+         <div style="flex:1;min-width:0">
+           <div style="font-weight:600;color:var(--ink)">${esc(sg.name)}</div>
+           <div class="muted">${sg.people} ${sg.people===1?'person':'people'}</div></div>
+         <button class="btn btn-o" onclick="compose('${sg.id}')">Message</button>
+       </div>`).join('')||'<div class="muted">No segments yet.</div>'}
+       <div class="sect">New segment</div>
+       <div style="display:flex;gap:9px;flex-wrap:wrap">
+         <input id="sg_n" placeholder="Away 3 weeks" style="flex:2;min-width:150px">
+         <select id="sg_f" style="flex:1;min-width:150px">
+           <option value='{"absent_weeks":3,"has_phone":true}'>Away 3+ weeks</option>
+           <option value='{"absent_weeks":6,"has_phone":true}'>Away 6+ weeks</option>
+           <option value='{"never_attended":true,"has_phone":true}'>Never attended</option>
+           <option value='{"stage":"first_timer","has_phone":true}'>First timers</option>
+           <option value='{"stage":"worker","has_phone":true}'>Workers</option>
+           <option value='{"has_phone":true}'>Everyone reachable</option>
+         </select>
+         <button class="btn" onclick="addSeg()">Add</button>
+       </div>
+     </div>
+
+     <div class="card">
+       <div class="ch"><i class="ti ti-template"></i><h3>Templates</h3>
+         <span class="r">${tpls.length}</span></div>
+       ${tpls.map(t=>`<div class="li" onclick="compose(null,'${t.id}')" style="cursor:pointer">
+         <div class="g" style="background:var(--good)"><i class="ti ti-message-2"></i></div>
+         <div style="flex:1;min-width:0">
+           <div style="font-weight:600;color:var(--ink)">${esc(t.name)}</div>
+           <div class="muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+             ${esc(t.body.slice(0,58))}…</div></div>
+         <i class="ti ti-chevron-right" style="color:var(--faint)"></i>
+       </div>`).join('')||'<div class="muted">None. Run migration 007.</div>'}
+     </div>
+   </div>
+
+   <div class="card">
+     <div class="ch"><i class="ti ti-send"></i><h3>Sent</h3><span class="r">${msgs.length}</span></div>
+     ${msgs.length?`<table><thead><tr>
+       <th>Message</th><th>To</th><th>Sent</th><th>Held back</th><th>Cost</th><th>Status</th>
+     </tr></thead><tbody>
+     ${msgs.map(m=>`<tr onclick="msgDetail('${m.id}')">
+       <td><div style="font-weight:600;color:var(--ink);max-width:280px;overflow:hidden;
+         text-overflow:ellipsis;white-space:nowrap">${esc(m.body.slice(0,60))}</div>
+         <div class="muted" style="font-size:12px">${m.encoding} · ${m.units_each} unit${m.units_each===1?'':'s'} each</div></td>
+       <td class="muted">${esc(m.segment_name||m.total_targets+' people')}</td>
+       <td class="num" style="color:var(--ink)">${m.sent_count}</td>
+       <td class="${m.suppressed?'num':'muted'}" style="color:${m.suppressed?'var(--warn)':''}">${m.suppressed}</td>
+       <td class="num muted">₦${Number(m.estimated_cost).toLocaleString()}</td>
+       <td><span class="tag ${m.status==='sent'?'t-g':m.status==='draft'?'t-w':m.status==='failed'?'t-r':'t-b'}">${m.status}</span></td>
+     </tr>`).join('')}</tbody></table>`
+     :'<div class="muted">Nothing sent yet.</div>'}
+   </div>`;
+}
+
+async function addSeg(){
+  const n=$('#sg_n').value.trim(); if(!n) return;
+  await api('/api/notify/segments',{method:'POST',
+    body:JSON.stringify({name:n, filter:JSON.parse($('#sg_f').value)})});
+  go('messages');
+}
+async function topup(){
+  const n=prompt('How many SMS credits?','1000'); if(!n) return;
+  await api('/api/notify/wallet/topup',{method:'POST',
+    body:JSON.stringify({credit_type:'sms', amount:Number(n)})});
+  go('messages');
+}
+
+async function compose(segId,tplId){
+  const [segs,tpls]=await Promise.all([
+    api('/api/notify/segments'), api('/api/notify/templates')]);
+  const tpl = tplId ? tpls.find(t=>t.id===tplId) : null;
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div class="h" style="font-size:22px;font-weight:500">Compose</div>
+    <div class="muted" style="margin-bottom:22px">
+      Nothing is sent until you press send — and you will see exactly who is being held back,
+      and why, before you do.</div>
+    <div id="merr"></div>
+    <div class="gg2">
+      <div class="field"><label>Send to</label><select id="m_seg">
+        ${segs.map(s=>`<option value="${s.id}" ${s.id===segId?'selected':''}>${esc(s.name)} (${s.people})</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Template</label><select id="m_tpl" onchange="useTpl()">
+        <option value="">— write it myself —</option>
+        ${tpls.map(t=>`<option value="${t.id}" ${t.id===tplId?'selected':''}
+          data-body="${esc(t.body)}">${esc(t.name)}</option>`).join('')}
+      </select></div>
+    </div>
+    <div class="field"><label>Message</label>
+      <textarea id="m_body" rows="5" oninput="cnt()" style="font-family:var(--text);font-size:14px;
+        padding:12px;border:1px solid var(--line);border-radius:8px;width:100%;resize:vertical"
+      >${esc(tpl?tpl.body:'')}</textarea>
+    </div>
+    <div id="m_cnt"></div>
+    <div class="muted" style="margin-top:10px;line-height:1.7">
+      <b style="color:var(--ink)">{{first_name}}</b> · <b style="color:var(--ink)">{{church}}</b>
+      · <b style="color:var(--ink)">{{service}}</b> are filled in per person.</div>
+    <div id="m_prev"></div>
+    <div style="display:flex;gap:12px;margin-top:24px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
+      <button class="btn" style="flex:2" onclick="doCompose()">Check before sending</button>
+    </div>
+  </div></div>`;
+  cnt();
+}
+function useTpl(){
+  const o=$('#m_tpl').selectedOptions[0];
+  if(o&&o.dataset.body){ $('#m_body').value=o.dataset.body; cnt(); }
+}
+async function cnt(){
+  const body=$('#m_body').value;
+  if(!body){ $('#m_cnt').innerHTML=''; return; }
+  const c=await api('/api/notify/count',{method:'POST',body:JSON.stringify({body})});
+  const bad=c.encoding==='UCS-2';
+  $('#m_cnt').innerHTML=`
+    <div style="background:${bad?'var(--warn-soft)':'var(--good-soft)'};border-radius:9px;
+         padding:13px 15px;display:flex;align-items:center;gap:14px">
+      <i class="ti ti-${bad?'alert-triangle':'circle-check'}"
+         style="font-size:22px;color:${bad?'var(--warn)':'var(--good)'}"></i>
+      <div style="flex:1">
+        <div style="font-weight:600;color:${bad?'var(--warn)':'var(--good)'}">
+          ${c.chars} characters · ${c.encoding} · <b>${c.units} SMS per person</b></div>
+        ${bad?`<div style="font-size:12px;color:var(--warn);line-height:1.6;margin-top:3px">
+          Broken by <b>${c.offenders.map(esc).join(' ')}</b> — these force 70 characters per SMS
+          instead of 160. <b>This message costs ${c.units}× what it should.</b>
+          A curly quote pasted from Word is usually the culprit.</div>`
+        :`<div style="font-size:12px;color:var(--good)">Fits the cheap encoding.</div>`}
+      </div>
+    </div>`;
+}
+async function doCompose(){
+  const body=$('#m_body').value.trim();
+  if(!body){$('#merr').innerHTML='<div class="err">Write something.</div>';return}
+  try{
+    const r=await api('/api/notify/compose',{method:'POST',
+      body:JSON.stringify({channel:'sms', body, segment_id:$('#m_seg').value})});
+    const B=r.breakdown||{};
+    const why={consent:'no consent',deceased:'deceased',frequency_cap:'already had 3 this week',
+      quiet_hours:'quiet hours',no_number:'no phone number',bounced:'number bounced'};
+    $('#m_prev').innerHTML=`
+      <div class="kpis" style="margin-top:18px">
+        <div class="kpi acc"><div class="l">Will send</div><div class="v">${r.sendable}</div></div>
+        <div class="kpi ${r.suppressed?'warn':''}"><div class="l">Held back</div>
+          <div class="v">${r.suppressed}</div></div>
+        <div class="kpi"><div class="l">Cost</div>
+          <div class="v" style="font-size:22px;padding-top:6px">₦${Number(r.cost).toLocaleString()}</div></div>
+      </div>
+      ${r.suppressed?`<div class="sect">Why ${r.suppressed} will not receive it</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${Object.entries(B).map(([k,v])=>`<span class="tag t-w">${v} — ${why[k]||k}</span>`).join('')}
+        </div>`:''}
+      <button class="btn" style="width:100%;margin-top:20px"
+        onclick="doSend('${r.message.id}',${r.sendable})">
+        Send to ${r.sendable} ${r.sendable===1?'person':'people'} · ₦${Number(r.cost).toLocaleString()}</button>`;
+  }catch(e){ $('#merr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
+}
+async function doSend(id,n){
+  if(!confirm(`Send to ${n} people?`))return;
+  try{
+    await api('/api/notify/send/'+id,{method:'POST'});
+    close_(); go('messages');
+  }catch(e){
+    $('#merr').innerHTML=`<div class="err">${esc(e.message)}</div>`;
+  }
+}
+async function msgDetail(id){
+  const m=await api('/api/notify/messages/'+id);
+  const why={consent:'no consent',deceased:'deceased',frequency_cap:'cap reached',
+    quiet_hours:'quiet hours',no_number:'no number',bounced:'bounced',no_credit:'no credit'};
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div class="h" style="font-size:20px;font-weight:500">Message</div>
+    <div style="background:var(--brand-wash);border-radius:9px;padding:16px;margin:16px 0;
+         font-size:14px;line-height:1.7">${esc(m.body)}</div>
+    <div class="kpis">
+      <div class="kpi acc"><div class="l">Sent</div><div class="v">${m.sent_count}</div></div>
+      <div class="kpi ${m.suppressed?'warn':''}"><div class="l">Held back</div><div class="v">${m.suppressed}</div></div>
+      <div class="kpi ${m.failed_count?'bad':''}"><div class="l">Failed</div><div class="v">${m.failed_count}</div></div>
+    </div>
+    <div class="sect">Everyone</div>
+    <div style="max-height:320px;overflow-y:auto">
+      ${(m.recipients||[]).map(r=>`<div class="li">
+        <div class="av">${ini(r.name)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;color:var(--ink)">${esc(r.name)}</div>
+          <div class="muted">${esc(r.address||'—')}${r.used_fallback?' (2nd SIM)':''}</div></div>
+        <span class="tag ${r.status==='delivered'?'t-g':r.status==='sent'?'t-b':
+          r.status==='suppressed'?'t-w':'t-r'}">
+          ${r.suppressed_reason?why[r.suppressed_reason]||r.suppressed_reason:r.status}</span>
+      </div>`).join('')}
+    </div>
+    <button class="btn btn-o" style="width:100%;margin-top:22px" onclick="close_()">Close</button>
+  </div></div>`;
 }
 
 (async()=>{
