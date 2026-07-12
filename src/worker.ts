@@ -1,7 +1,7 @@
-/** Worker process: outbox relay + scheduled job handlers. */
+/** Worker process: outbox relay + scheduled jobs. Needs Redis. The API does not. */
 import { Worker } from "bullmq";
 import IORedis from "ioredis";
-import { startOutboxRelay, registerSchedules } from "./platform/events";
+import { startOutboxRelay, registerSchedules } from "./platform/queue";
 import { runMeteringSnapshot, runRenewals, runDunningSweep } from "./billing/metering";
 import { platformQuery } from "./platform/db";
 
@@ -14,12 +14,10 @@ new Worker("jobs", async (job) => {
   switch (job.name) {
     case "billing.metering.snapshot": return runMeteringSnapshot();
     case "billing.dunning.sweep":     await runRenewals(); return runDunningSweep();
-    case "persons.billable.derive":   return; // folded into metering snapshot
     case "sessions.purge":
       await platformQuery(`DELETE FROM sessions WHERE expires_at < now()`);
       return;
-    default:
-      console.warn("unknown job", job.name);
+    default: console.warn("unknown job", job.name);
   }
 }, { connection });
 

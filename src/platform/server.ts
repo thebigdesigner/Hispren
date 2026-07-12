@@ -9,6 +9,7 @@ import cookie from "@fastify/cookie";
 import { tenantResolver, requireTenant } from "./tenant";
 import { authenticate, requireRole, login, logout, tenantTx } from "./auth";
 import { healthcheck } from "./db";
+import { registerMemberRoutes } from "../members/routes";
 
 export function buildServer() {
   const app = Fastify({
@@ -74,6 +75,8 @@ export function buildServer() {
       return { invoices: r.rows };
     })
   );
+
+  registerMemberRoutes(app);
 
   return app;
 }
