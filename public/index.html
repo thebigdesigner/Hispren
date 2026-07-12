@@ -460,8 +460,7 @@ async function viewAtt(){
      ${rows.map(r=>`<div class="kpi ${r.present===top&&top?'acc':''}">
        <div class="l">${esc(r.service)}</div><div class="v">${r.present||0}</div>
        <div class="d muted">${r.first_timers||0} first-timers</div></div>`).join('')
-       ||'<div class="kpi"><div class="l">Today</div><div class="v">0</div>
-          <div class="d muted">No sessions opened</div></div>'}
+       ||`<div class="kpi"><div class="l">Today</div><div class="v">0</div><div class="d muted">No sessions opened</div></div>`}
      <div class="kpi"><div class="l">Total today</div><div class="v">${total}</div>
        <div class="d muted">Across all services</div></div>
    </div>
