@@ -18,6 +18,7 @@ import { registerChurchRoutes } from "../church/routes";
 import { registerReportRoutes } from "../reports/routes";
 import { registerNotifyRoutes } from "../notify/routes";
 import { registerListRoutes } from "../lists/routes";
+import { registerGivingRoutes } from "../giving/routes";
 import { registerCareRoutes } from "../care/routes";
 
 export function buildServer() {
@@ -98,6 +99,7 @@ export function buildServer() {
   registerReportRoutes(app);
   registerNotifyRoutes(app);
   registerListRoutes(app);
+  registerGivingRoutes(app);
   registerCareRoutes(app);
 
   return app;

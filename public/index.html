@@ -206,6 +206,9 @@ tr.flag:hover{background:#FBDFDF}
     <div class="nav"    data-v="care"       onclick="go('care')"><i class="ti ti-heart-handshake"></i>Pastoral care</div>
     <div class="nav"    data-v="messages"   onclick="go('messages')"><i class="ti ti-message-2"></i>Messages</div>
     <div class="nav"    data-v="reports"    onclick="go('reports')"><i class="ti ti-chart-line"></i>Reports</div>
+    <div class="slab">Money</div>
+    <div class="nav"    data-v="giving"     onclick="go('giving')"><i class="ti ti-coins"></i>Giving</div>
+    <div class="nav"    data-v="finance"    onclick="go('finance')"><i class="ti ti-report-money"></i>Finance</div>
     <div class="slab">Data</div>
     <div class="nav"    data-v="duplicates" onclick="go('duplicates')"><i class="ti ti-copy"></i>Duplicates<span id="dBadge"></span></div>
     <div class="nav"    data-v="import"     onclick="go('import')"><i class="ti ti-file-import"></i>Import</div>
@@ -285,7 +288,8 @@ function go(v){
     home:viewHome, members:viewMembers, lists:viewLists, attendance:viewAtt,
     groups:viewGroups, families:viewFamilies, calendar:viewCal,
     followups:viewTasks, care:viewCare,
-    messages:viewMessages, reports:viewReports, duplicates:viewDupes,
+    messages:viewMessages, reports:viewReports,
+    giving:viewGiving, finance:viewFinance, duplicates:viewDupes,
     import:viewImport, export:viewExport, settings:viewSettings,
   };
   const f = R[v];
@@ -2810,6 +2814,495 @@ async function msgFamily(id,name){
   if(!(f.members||[]).length){ alert('Nobody in that family yet.'); return; }
   close_();
   messageThese(f.members.map(p=>p.id), name);
+}
+
+
+/* =============================== GIVING ============================== */
+const NGN = n => 'NGN ' + Number(n||0).toLocaleString('en-NG',{maximumFractionDigits:0});
+let BATCH=null, FUNDS=[];
+
+async function viewGiving(){
+  const [funds, batches] = await Promise.all([
+    api('/api/giving/funds').catch(()=>[]),
+    api('/api/giving/batches').catch(()=>[])]);
+  FUNDS = funds;
+  const total = funds.reduce((a,f)=>a+Number(f.balance||0),0);
+  const restricted = funds.filter(f=>f.kind==='restricted')
+    .reduce((a,f)=>a+Number(f.balance||0),0);
+
+  head('Giving', `${NGN(total)} across ${funds.length} fund${funds.length===1?'':'s'}`,
+    `<button class="btn" onclick="newBatch()">Count an offering</button>`);
+
+  $('#view').innerHTML=`
+   <div class="kpis">
+     <div class="kpi acc"><div class="l">Total held</div><div class="v">${NGN(total)}</div>
+       <div class="d muted">Across every fund</div></div>
+     <div class="kpi warn"><div class="l">Restricted</div><div class="v">${NGN(restricted)}</div>
+       <div class="d" style="color:var(--warn-dk)">Not yours to spend freely</div></div>
+     <div class="kpi"><div class="l">Free to spend</div>
+       <div class="v">${NGN(total-restricted)}</div>
+       <div class="d muted">General and designated</div></div>
+     <div class="kpi"><div class="l">Counts</div><div class="v">${batches.length}</div></div>
+   </div>
+
+   <div class="card" style="margin-bottom:16px">
+     <div class="ch"><i class="ti ti-wallet"></i><h3>Funds</h3>
+       <button class="btn btn-o" style="margin-left:auto;padding:7px 13px;font-size:13px"
+         onclick="newFund()">New fund</button></div>
+     <table><thead><tr>
+       <th>Fund</th><th>Given</th><th>Spent</th><th>Balance</th><th>May be spent on</th>
+     </tr></thead><tbody>
+     ${funds.map(f=>`<tr>
+       <td><div style="font-weight:600;color:var(--ink)">${esc(f.name)}</div>
+         <div><span class="tag ${f.kind==='restricted'?'t-r':f.kind==='designated'?'t-w':'t-g'}"
+           >${esc(f.kind)}</span></div></td>
+       <td class="num muted">${NGN(f.given)}</td>
+       <td class="num muted">${NGN(f.spent)}</td>
+       <td class="num" style="color:var(--ink);font-size:15px">${NGN(f.balance)}</td>
+       <td class="muted" style="font-size:12px">${
+         f.kind!=='restricted' ? '<span style="color:var(--good-dk)">anything</span>'
+         : f.allowed_categories && f.allowed_categories.length
+           ? esc(f.allowed_categories.join(', '))
+           : '<span style="color:var(--warn-dk)">no categories set — only deficit is blocked</span>'}</td>
+     </tr>`).join('')||'<tr><td colspan="5" class="muted">No funds. Run migration 009.</td></tr>'}
+     </tbody></table>
+     <div class="muted" style="margin-top:14px;line-height:1.8">
+       A <b style="color:var(--ink)">restricted</b> fund holds money the <b style="color:var(--ink)">giver</b>
+       said what it was for. Hispren will <b style="color:var(--ink)">refuse</b> an expense outside those
+       categories, and refuse one that would take it into deficit. Not warn — refuse.
+       No other church platform does this.</div>
+   </div>
+
+   <div class="card">
+     <div class="ch"><i class="ti ti-cash"></i><h3>Counts</h3><span class="r">${batches.length}</span></div>
+     ${batches.length?`<table><thead><tr>
+       <th>Count</th><th>Date</th><th>Counted by</th><th>Entries</th><th>Total</th><th>Status</th>
+     </tr></thead><tbody>
+     ${batches.map(b=>`<tr onclick="openBatch('${b.id}')">
+       <td style="font-weight:600;color:var(--ink)">${esc(b.name)}</td>
+       <td class="muted">${new Date(b.batch_date).toLocaleDateString('en-GB',
+         {day:'numeric',month:'short',year:'numeric'})}</td>
+       <td class="muted" style="font-size:12px">${esc(b.counted_by||'—')}</td>
+       <td class="num muted">${b.entries}</td>
+       <td class="num" style="color:var(--ink)">${NGN(b.counted)}</td>
+       <td><span class="tag ${b.status==='open'?'t-w':'t-g'}">${b.status}</span></td>
+     </tr>`).join('')}</tbody></table>`
+     :`<div class="muted">No offerings counted yet.
+        <b style="color:var(--ink)">Count an offering</b> to start.</div>`}
+   </div>`;
+}
+
+/* ------------------------- a counting session ------------------------- */
+function newBatch(){
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal"
+      style="max-width:520px">
+    <div class="h" style="font-size:22px;font-weight:500">Count an offering</div>
+    <div class="muted" style="margin-bottom:22px;line-height:1.8">
+      <b style="color:var(--ink)">Two people count. Both are named.</b>
+      That is not bureaucracy — it is the only thing standing between a church and
+      a quiet theft nobody can prove.</div>
+    <div id="berr"></div>
+    <div class="field"><label>What is this</label>
+      <input id="b_name" value="Sunday offering" ></div>
+    <div class="gg2">
+      <div class="field"><label>Date</label>
+        <input id="b_date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>Expected total — what they said out loud</label>
+        <input id="b_exp" type="number" min="0" placeholder="1450000"></div>
+    </div>
+    <div class="gg2">
+      <div class="field"><label>Counted by — both names</label>
+        <input id="b_cnt" placeholder="Bro. Emeka + Sis. Ngozi"></div>
+      <div class="field"><label>Verified by</label>
+        <input id="b_ver" placeholder="Treasurer"></div>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:22px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
+      <button class="btn" style="flex:2" onclick="saveBatch()">Start counting</button>
+    </div>
+  </div></div>`;
+}
+async function saveBatch(){
+  const name=$('#b_name').value.trim();
+  if(!name){$('#berr').innerHTML='<div class="err">Name it.</div>';return}
+  try{
+    const b=await api('/api/giving/batches',{method:'POST',body:JSON.stringify({
+      name, batch_date:$('#b_date').value||null,
+      counted_by:$('#b_cnt').value.trim()||null,
+      verified_by:$('#b_ver').value.trim()||null,
+      expected_total:$('#b_exp').value?Number($('#b_exp').value):null })});
+    close_(); openBatch(b.id);
+  }catch(e){ $('#berr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
+}
+
+async function openBatch(id){
+  const b=await api('/api/giving/batches/'+id);
+  BATCH=b;
+  const open = b.status==='open';
+  const diff = b.expected_total ? Number(b.counted)-Number(b.expected_total) : null;
+
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:18px">
+      <div style="flex:1;min-width:0">
+        <div class="h" style="font-size:22px;font-weight:500">${esc(b.name)}</div>
+        <div class="muted">${new Date(b.batch_date).toLocaleDateString('en-GB',
+          {weekday:'long',day:'numeric',month:'long',year:'numeric'})}
+          ${b.counted_by?' · counted by '+esc(b.counted_by):''}</div>
+      </div>
+      <span class="tag ${open?'t-w':'t-g'}">${b.status}</span>
+    </div>
+
+    <div class="kpis" style="margin-bottom:18px">
+      <div class="kpi acc"><div class="l">Counted</div><div class="v">${NGN(b.counted)}</div></div>
+      ${b.expected_total?`<div class="kpi ${diff?'bad':''}"><div class="l">They said</div>
+        <div class="v">${NGN(b.expected_total)}</div>
+        ${diff?`<div class="d" style="color:var(--bad)">
+          ${diff>0?'+':''}${NGN(diff)} difference</div>`:'<div class="d muted">matches</div>'}</div>`:''}
+      <div class="kpi"><div class="l">Entries</div><div class="v">${(b.entries||[]).length}</div></div>
+    </div>
+
+    ${diff?`<div class="err" style="line-height:1.75">
+      <b>The entries do not add up to what the counters said.</b>
+      ${NGN(Math.abs(diff))} ${diff>0?'more':'less'} than expected. Find it before you close this —
+      a discrepancy quietly absorbed is a discrepancy nobody ever investigates.</div>`:''}
+
+    ${open?`
+    <div class="sect">Add what was counted</div>
+    <div style="background:var(--brand-wash);border:1px solid var(--brand-soft);
+         border-radius:9px;padding:16px;margin-bottom:18px">
+      <div class="gg2">
+        <div class="field"><label>Fund</label><select id="c_fund" onchange="cKind()">
+          ${FUNDS.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join('')}
+        </select></div>
+        <div class="field"><label>Amount</label>
+          <input id="c_amt" type="number" min="1" placeholder="412000"></div>
+      </div>
+      <div class="field"><label>Who gave it</label>
+        <select id="c_person" onchange="cWho()">
+          <option value="">Anonymous — loose cash from the bags</option>
+          ${MEMBERS.map(m=>`<option value="${m.id}">${esc(m.full_name)}</option>`).join('')}
+        </select>
+        <div class="muted" style="margin-top:7px;line-height:1.65" id="c_note">
+          Most Nigerian offering is anonymous cash. That is normal, and it is recorded
+          honestly — it will never appear on anybody's year-end statement.</div>
+      </div>
+      <div class="gg2">
+        <div class="field"><label>Method</label><select id="c_method">
+          <option value="cash">Cash</option><option value="transfer">Bank transfer</option>
+          <option value="pos">POS</option><option value="cheque">Cheque</option>
+          <option value="in_kind">In kind</option></select></div>
+        <div class="field" id="c_extraF"><label>How many gave (headcount)</label>
+          <input id="c_head" type="number" min="0" placeholder="380"></div>
+      </div>
+      <button class="btn" style="width:100%" onclick="addEntry()">Add</button>
+    </div>`:''}
+
+    <div class="sect">What was counted — ${(b.entries||[]).length}</div>
+    ${(b.entries||[]).map(e=>`<div class="li">
+      <div class="g" style="background:${e.anonymous?'var(--muted)':'var(--brand)'}">
+        <i class="ti ti-${e.anonymous?'cash':'user'}"></i></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;color:var(--ink)">
+          ${e.anonymous ? 'Anonymous' : esc(e.person)}</div>
+        <div class="muted">${esc(e.fund)} · ${esc(e.method)}${
+          e.envelope_no?' · envelope '+esc(e.envelope_no):''}${
+          e.reference?' · '+esc(e.reference):''}${
+          e.headcount?' · '+e.headcount+' gave':''}</div></div>
+      <div class="num" style="font-size:15px;color:var(--ink)">${NGN(e.amount)}</div>
+      ${open?`<i class="ti ti-x" style="color:var(--faint);cursor:pointer;font-size:18px"
+        onclick="rmEntry('${e.id}')"></i>`:''}
+    </div>`).join('')||'<div class="muted">Nothing yet.</div>'}
+
+    <div style="display:flex;gap:12px;margin-top:24px">
+      <button class="btn btn-o" style="flex:1" onclick="close_();go('giving')">Close</button>
+      ${open?`<button class="btn" style="flex:2" onclick="closeBatch('${id}')">
+        Close and sign off</button>`
+      :`<div class="muted" style="flex:2;text-align:center;align-self:center;line-height:1.6">
+         Signed off. This cannot be edited.</div>`}
+    </div>
+  </div></div>`;
+  cWho();
+}
+function cWho(){
+  const anon = !$('#c_person') || !$('#c_person').value;
+  const n=$('#c_note'), x=$('#c_extraF');
+  if(n) n.innerHTML = anon
+    ? 'Most Nigerian offering is anonymous cash. That is normal, and it is recorded honestly — it will never appear on anybody&rsquo;s year-end statement.'
+    : '<b style="color:var(--ink)">Named.</b> This will appear on their year-end giving statement.';
+  if(x) x.style.display = anon ? '' : 'none';
+}
+function cKind(){}
+async function addEntry(){
+  const amt=Number($('#c_amt').value);
+  if(!amt||amt<=0) return;
+  try{
+    await api(`/api/giving/batches/${BATCH.id}/entries`,{method:'POST',body:JSON.stringify({
+      fund_id:$('#c_fund').value, amount:amt,
+      person_id:$('#c_person').value||null,
+      method:$('#c_method').value,
+      headcount:$('#c_head')&&$('#c_head').value?Number($('#c_head').value):null })});
+    openBatch(BATCH.id);
+  }catch(e){ alert(e.message) }
+}
+async function rmEntry(id){
+  try{ await api('/api/giving/entries/'+id,{method:'DELETE'}); openBatch(BATCH.id); }
+  catch(e){ alert(e.message) }
+}
+async function closeBatch(id){
+  if(!confirm('Close and sign off?\n\nOnce closed this count CANNOT be edited. '
+    +'If it turns out to be wrong, you record a correcting entry in a new count — '
+    +'you never quietly change a figure two people already signed.'))return;
+  try{
+    const r=await api(`/api/giving/batches/${id}/close`,{method:'POST'});
+    close_(); go('giving');
+    if(r.discrepancy) alert(`Closed — but the entries were ${NGN(Math.abs(r.discrepancy))} `
+      +`${r.discrepancy>0?'more':'less'} than the counters said. That is on the record.`);
+  }catch(e){ alert(e.message) }
+}
+
+function newFund(){
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal"
+      style="max-width:520px">
+    <div class="h" style="font-size:22px;font-weight:500">New fund</div>
+    <div class="muted" style="margin-bottom:22px;line-height:1.8">
+      A <b style="color:var(--ink)">restricted</b> fund holds money the giver said what it was for.
+      List the categories it may be spent on and Hispren will refuse everything else —
+      at the database, not as a warning you can click past.</div>
+    <div id="fnerr"></div>
+    <div class="field"><label>Name</label><input id="fn_name" placeholder="Building Fund"></div>
+    <div class="gg2">
+      <div class="field"><label>Kind</label><select id="fn_kind" onchange="fnKind()">
+        <option value="general">General — spend on anything</option>
+        <option value="restricted">Restricted — the GIVER decided</option>
+        <option value="designated">Designated — the BOARD decided</option>
+      </select></div>
+      <div class="field"><label>Code</label><input id="fn_code" placeholder="BLD"></div>
+    </div>
+    <div class="field" id="fn_catF" style="display:none">
+      <label>May only be spent on — comma separated</label>
+      <input id="fn_cat" placeholder="Building, Construction, Materials, Land">
+      <div class="muted" style="margin-top:7px;line-height:1.65">
+        An expense in any other category will be <b style="color:var(--ink)">refused</b>.
+        Leave blank and only a deficit is blocked — which is not enough.</div>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:22px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
+      <button class="btn" style="flex:2" onclick="saveFund()">Create</button>
+    </div>
+  </div></div>`;
+}
+function fnKind(){
+  $('#fn_catF').style.display = $('#fn_kind').value==='restricted' ? '' : 'none';
+}
+async function saveFund(){
+  const name=$('#fn_name').value.trim();
+  if(!name){$('#fnerr').innerHTML='<div class="err">Name it.</div>';return}
+  const cats=$('#fn_cat').value.split(',').map(x=>x.trim()).filter(Boolean);
+  try{
+    await api('/api/giving/funds',{method:'POST',body:JSON.stringify({
+      name, kind:$('#fn_kind').value, code:$('#fn_code').value.trim()||null,
+      allowed_categories:cats })});
+    close_(); go('giving');
+  }catch(e){ $('#fnerr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
+}
+
+/* =============================== FINANCE ============================= */
+async function viewFinance(){
+  const [funds, exps, income, top, months] = await Promise.all([
+    api('/api/giving/funds').catch(()=>[]),
+    api('/api/giving/expenses').catch(()=>[]),
+    api('/api/giving/income').catch(()=>[]),
+    api('/api/giving/top').catch(()=>[]),
+    api('/api/giving/by-month?months=6').catch(()=>[])]);
+  FUNDS = funds;
+  const pending = exps.filter(e=>e.status==='pending');
+  const totIn  = income.reduce((a,r)=>a+Number(r.income||0),0);
+  const totOut = income.reduce((a,r)=>a+Number(r.expenditure||0),0);
+
+  head('Finance', `${new Date().getFullYear()} · in ${NGN(totIn)} · out ${NGN(totOut)}`,
+    `<button class="btn" onclick="newExpense()">Record an expense</button>`);
+
+  $('#view').innerHTML=`
+   <div class="kpis">
+     <div class="kpi acc"><div class="l">Income</div><div class="v">${NGN(totIn)}</div>
+       <div class="d muted">This year</div></div>
+     <div class="kpi"><div class="l">Expenditure</div><div class="v">${NGN(totOut)}</div>
+       <div class="d muted">Approved only</div></div>
+     <div class="kpi ${totIn-totOut<0?'bad':''}"><div class="l">Net</div>
+       <div class="v">${NGN(totIn-totOut)}</div>
+       <div class="d" style="color:${totIn-totOut<0?'var(--bad)':'var(--good-dk)'}">
+         ${totIn-totOut<0?'Spending more than you receive':'In surplus'}</div></div>
+     <div class="kpi ${pending.length?'warn':''}"><div class="l">Awaiting approval</div>
+       <div class="v">${pending.length}</div></div>
+   </div>
+
+   ${pending.length?`<div class="card" style="margin-bottom:16px;border-left:3px solid var(--warn)">
+     <div class="ch"><i class="ti ti-clock" style="color:var(--warn)"></i>
+       <h3>Waiting for approval</h3><span class="r">${pending.length}</span></div>
+     <div class="muted" style="line-height:1.75;margin-bottom:14px">
+       Whoever records a payment must not be the person who approves it.
+       That separation is worth more than any lock.</div>
+     ${pending.map(e=>`<div class="li">
+       <div class="g" style="background:var(--warn)"><i class="ti ti-receipt"></i></div>
+       <div style="flex:1;min-width:0">
+         <div style="font-weight:600;color:var(--ink)">${esc(e.payee)}</div>
+         <div class="muted">${esc(e.fund)}${e.category?' · '+esc(e.category):''} ·
+           ${new Date(e.spent_on).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div></div>
+       <div class="num" style="font-size:15px">${NGN(e.amount)}</div>
+       <button class="btn btn-o" style="padding:7px 12px;font-size:13px;color:var(--bad);
+         border-color:var(--bad-soft)" onclick="approve('${e.id}',false)">Reject</button>
+       <button class="btn" style="padding:7px 12px;font-size:13px"
+         onclick="approve('${e.id}',true)">Approve</button>
+     </div>`).join('')}
+   </div>`:''}
+
+   <div class="g2">
+     <div class="card">
+       <div class="ch"><i class="ti ti-report-money"></i><h3>Income and expenditure</h3>
+         <span class="r">${new Date().getFullYear()}</span></div>
+       <table><thead><tr><th>Fund</th><th>In</th><th>Out</th><th>Net</th></tr></thead><tbody>
+       ${income.map(r=>`<tr>
+         <td><div style="font-weight:600;color:var(--ink)">${esc(r.fund)}</div>
+           <div><span class="tag ${r.kind==='restricted'?'t-r':'t-g'}">${esc(r.kind)}</span></div></td>
+         <td class="num muted">${NGN(r.income)}</td>
+         <td class="num muted">${NGN(r.expenditure)}</td>
+         <td class="num" style="color:${Number(r.net)<0?'var(--bad)':'var(--ink)'}">${NGN(r.net)}</td>
+       </tr>`).join('')}
+       <tr style="border-top:2px solid var(--line)">
+         <td style="font-weight:700;color:var(--ink)">Total</td>
+         <td class="num" style="color:var(--ink)">${NGN(totIn)}</td>
+         <td class="num" style="color:var(--ink)">${NGN(totOut)}</td>
+         <td class="num" style="color:var(--ink);font-size:15px">${NGN(totIn-totOut)}</td>
+       </tr></tbody></table>
+     </div>
+
+     <div class="card">
+       <div class="ch"><i class="ti ti-chart-bar"></i><h3>Giving, last 6 months</h3></div>
+       ${months.length?months.map(m=>{
+         const peak=Math.max(...months.map(x=>Number(x.total)));
+         const namedPct = Number(m.total) ? Number(m.named)/Number(m.total)*100 : 0;
+         return `<div class="meter">
+           <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+             <div><div style="font-weight:600;color:var(--ink);font-size:13px">
+               ${new Date(m.month).toLocaleDateString('en-GB',{month:'long',year:'numeric'})}</div>
+               <div class="muted">${m.gifts} gift${m.gifts===1?'':'s'} ·
+                 ${Math.round(namedPct)}% named</div></div>
+             <div class="num" style="font-size:14px">${NGN(m.total)}</div></div>
+           <div class="bar" style="display:flex">
+             <div style="width:${namedPct}%;background:var(--brand)"></div>
+             <div style="width:${100-namedPct}%;background:var(--faint)"></div>
+           </div>
+         </div>`;}).join('')
+       :'<div class="muted">Nothing recorded yet.</div>'}
+       <div class="muted" style="margin-top:12px;line-height:1.7">
+         Green is <b style="color:var(--ink)">named</b> giving — people you can thank, and issue a
+         statement to. Grey is anonymous cash.</div>
+     </div>
+   </div>
+
+   <div class="card" style="margin-top:16px">
+     <div class="ch"><i class="ti ti-receipt"></i><h3>Recent expenses</h3></div>
+     ${exps.length?`<table><thead><tr>
+       <th>Payee</th><th>Fund</th><th>Category</th><th>Date</th><th>Amount</th><th>Status</th>
+     </tr></thead><tbody>
+     ${exps.slice(0,20).map(e=>`<tr>
+       <td style="font-weight:600;color:var(--ink)">${esc(e.payee)}</td>
+       <td class="muted">${esc(e.fund)}</td>
+       <td class="muted">${esc(e.category||'—')}</td>
+       <td class="muted">${new Date(e.spent_on).toLocaleDateString('en-GB',
+         {day:'numeric',month:'short'})}</td>
+       <td class="num" style="color:var(--ink)">${NGN(e.amount)}</td>
+       <td><span class="tag ${e.status==='approved'?'t-g':e.status==='rejected'?'t-r':'t-w'}"
+         >${esc(e.status)}</span></td>
+     </tr>`).join('')}</tbody></table>`
+     :'<div class="muted">Nothing spent yet.</div>'}
+   </div>`;
+}
+
+function newExpense(){
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal"
+      style="max-width:520px">
+    <div class="h" style="font-size:22px;font-weight:500">Record an expense</div>
+    <div class="muted" style="margin-bottom:22px;line-height:1.8">
+      If you pick a <b style="color:var(--ink)">restricted</b> fund, Hispren will refuse any
+      category the givers did not agree to — and refuse anything that would take it into deficit.
+      It will not warn you. It will refuse.</div>
+    <div id="xerr"></div>
+    <div class="gg2">
+      <div class="field"><label>Fund</label><select id="x_fund" onchange="xFund()">
+        ${FUNDS.map(f=>`<option value="${f.id}" data-kind="${f.kind}"
+          data-cats="${(f.allowed_categories||[]).join('|')}">${esc(f.name)}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Amount</label>
+        <input id="x_amt" type="number" min="1" placeholder="400000"></div>
+    </div>
+    <div id="x_warn"></div>
+    <div class="field"><label>Paid to</label>
+      <input id="x_payee" placeholder="Dangote Roofing Ltd"></div>
+    <div class="gg2">
+      <div class="field"><label>Category</label>
+        <select id="x_cat"></select></div>
+      <div class="field"><label>Date</label>
+        <input id="x_date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+    </div>
+    <div class="gg2">
+      <div class="field"><label>Method</label><select id="x_method">
+        <option value="cash">Cash</option><option value="transfer">Bank transfer</option>
+        <option value="pos">POS</option><option value="cheque">Cheque</option></select></div>
+      <div class="field"><label>Reference</label><input id="x_ref"></div>
+    </div>
+    <div style="background:var(--brand-wash);border:1px solid var(--brand-soft);border-radius:9px;
+         padding:14px;display:flex;gap:11px;align-items:flex-start">
+      <input type="checkbox" id="x_appr" style="margin-top:2px;flex-shrink:0">
+      <label for="x_appr" style="text-transform:none;letter-spacing:0;font-weight:400;
+        color:var(--body);font-size:13px;line-height:1.7;margin:0;cursor:pointer">
+        Approve it now. <b style="color:var(--ink)">Leave this unticked</b> if somebody else should
+        approve it — whoever records a payment should not be the one who approves it.</label>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:22px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
+      <button class="btn" style="flex:2" onclick="saveExpense()">Record</button>
+    </div>
+  </div></div>`;
+  xFund();
+}
+function xFund(){
+  const o=$('#x_fund').selectedOptions[0];
+  const kind=o.dataset.kind, cats=(o.dataset.cats||'').split('|').filter(Boolean);
+  const sel=$('#x_cat');
+  sel.innerHTML = cats.length
+    ? cats.map(c=>`<option>${esc(c)}</option>`).join('')
+    : ['Salaries','Rent','Electricity','Water','Fuel','Transport','Building','Materials',
+       'Welfare','Missions','Equipment','Maintenance','Printing','Refreshments','Other']
+        .map(c=>`<option>${c}</option>`).join('');
+  $('#x_warn').innerHTML = kind==='restricted'
+    ? `<div style="background:var(--bad-soft);color:var(--bad-dk);padding:12px 14px;
+         border-radius:8px;font-size:13px;line-height:1.7;margin-bottom:16px">
+         <b>Restricted fund.</b> ${cats.length
+           ? `It may only be spent on: <b>${cats.map(esc).join(', ')}</b>. Anything else will be refused.`
+           : 'No categories set — only a deficit will be blocked. Set them on the fund.'}</div>`
+    : '';
+}
+async function saveExpense(){
+  const amt=Number($('#x_amt').value), payee=$('#x_payee').value.trim();
+  if(!amt||!payee){$('#xerr').innerHTML='<div class="err">Amount and payee.</div>';return}
+  try{
+    await api('/api/giving/expenses',{method:'POST',body:JSON.stringify({
+      fund_id:$('#x_fund').value, amount:amt, payee,
+      category:$('#x_cat').value, spent_on:$('#x_date').value,
+      method:$('#x_method').value, reference:$('#x_ref').value.trim()||null,
+      approve:$('#x_appr').checked })});
+    close_(); go('finance');
+  }catch(e){
+    // This is the database refusing, not a check in TypeScript. Say so.
+    $('#xerr').innerHTML=`<div class="err" style="line-height:1.75">
+      <b>Refused.</b><br>${esc(e.message)}</div>`;
+  }
+}
+async function approve(id,ok){
+  try{ await api(`/api/giving/expenses/${id}/approve`,{method:'POST',
+    body:JSON.stringify({approve:ok})}); go('finance'); }
+  catch(e){ alert(e.message) }
 }
 
 (async()=>{

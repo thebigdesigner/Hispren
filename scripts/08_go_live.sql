@@ -32,6 +32,10 @@ BEGIN
   -- The Nigerian Sunday: three services plus midweek. Without these, Attendance
   -- has nothing to open and the scanner has nothing to scan into.
   PERFORM seed_services(t);
+
+  -- The funds a Nigerian church actually keeps, with the categories each
+  -- restricted fund may be spent on. The database refuses everything else.
+  PERFORM seed_funds(t);
   RESET ROLE;
 END $$;
 
@@ -45,6 +49,8 @@ SELECT 'templates',  count(*)::text FROM message_templates
 UNION ALL
 SELECT 'sender ids', count(*)::text FROM sender_ids
 UNION ALL
-SELECT 'services',   count(*)::text FROM services;
+SELECT 'services',   count(*)::text FROM services
+UNION ALL
+SELECT 'funds',      count(*)::text FROM funds;
 
 RESET ROLE;
