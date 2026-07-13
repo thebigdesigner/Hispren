@@ -6,172 +6,209 @@
 <title>Hispren</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.2.0/dist/tabler-icons.min.css" rel="stylesheet">
 <style>
 :root{
-  /* Termii console. Near-black sidebar, white cards, one green. */
-  --ink:#12141A; --body:#4A4F5C; --muted:#8B92A0; --faint:#B9BEC8;
-  --brand:#00C389; --brand-dk:#00996B; --brand-deep:#00674A;
-  --brand-soft:#E4F8F0; --brand-wash:#F2FCF8;
-  --good:#00C389; --good-soft:#E4F8F0; --good-dk:#00674A;
-  --warn:#F5A623; --warn-soft:#FEF4E4; --warn-dk:#8A5A00;
-  --bad:#E5484D;  --bad-soft:#FDECEC;  --bad-dk:#A81E22;
-  --shell:#0D0F14; --shell-2:#171A21; --shell-line:#252932; --shell-tx:#8B92A0;
-  --canvas:#F7F8FA; --card:#FFFFFF; --line:#E8EAEE; --line2:#F1F2F5;
-
-  --head:'DM Sans',system-ui,sans-serif;   /* headings, UI */
-  --text:'Karla',system-ui,sans-serif;     /* prose */
-  --mono:'DM Mono',ui-monospace,monospace; /* FIGURES. Numbers must line up. */
+  /* Payoneer. White. Thin grey lines. Near-black text. Blue is the only
+     interactive colour — the orange lives in the logo, not the interface. */
+  --ink:#1A1A2E; --body:#4A4A5A; --muted:#8A8A9C; --faint:#B8B8C4;
+  --blue:#1A5FD0; --blue-dk:#134BAA; --blue-soft:#E9F0FC; --blue-wash:#F5F8FE;
+  --orange:#FF4800;                       /* the mark only */
+  --good:#00A868; --good-soft:#E4F7EF; --good-dk:#00794B;
+  --warn:#F5A623; --warn-soft:#FDF1E7; --warn-dk:#8A5A00;
+  --bad:#E5342A;  --bad-soft:#FDEAE9;  --bad-dk:#B0201A;
+  --canvas:#FFFFFF; --surface:#F7F7FA; --card:#FFFFFF;
+  --line:#E2E2E8; --line2:#F0F0F4;
+  --f:'Inter',system-ui,-apple-system,sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:var(--text);background:var(--canvas);color:var(--body);
-  font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
-h1,h2,h3,.h{font-family:var(--head);color:var(--ink);letter-spacing:-.015em;font-weight:600}
+body{font-family:var(--f);background:var(--canvas);color:var(--body);
+  font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3,.h{color:var(--ink);font-weight:600;letter-spacing:-.02em}
+.num{font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 
-/* Every figure is DM Mono, tabular. A column of phone numbers or attendance
-   counts must line up — that is what makes a dashboard scannable. */
-.num{font-family:var(--mono);font-weight:500;font-variant-numeric:tabular-nums}
-
-button{font-family:var(--head);cursor:pointer;border:none;background:none}
-input,select,textarea{font-family:var(--text);font-size:14px;padding:10px 13px;
+button{font-family:var(--f);cursor:pointer;border:none;background:none}
+input,select,textarea{font-family:var(--f);font-size:14px;padding:11px 13px;
   border:1px solid var(--line);border-radius:8px;width:100%;background:#fff;color:var(--ink)}
-/* Checkboxes must not inherit width:100% and stretch across the cell. */
-input[type=checkbox]{width:16px;height:16px;padding:0;accent-color:var(--brand);cursor:pointer}
-input[type=color]{padding:3px;height:42px}
-input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brand);
-  box-shadow:0 0 0 3px var(--brand-soft)}
-label{display:block;font-family:var(--head);font-size:12px;font-weight:600;color:var(--muted);
-  margin-bottom:7px;text-transform:uppercase;letter-spacing:.06em}
-.field{margin-bottom:16px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);
+  box-shadow:0 0 0 3px var(--blue-soft)}
+label{display:block;font-size:13px;font-weight:500;color:var(--body);margin-bottom:7px}
+.field{margin-bottom:18px}
 .muted{color:var(--muted);font-size:13px}
 
-.btn{font-family:var(--head);background:var(--brand);color:#062B20;font-size:14px;
-  font-weight:600;padding:10px 20px;border-radius:8px;transition:background .15s}
-.btn:hover{background:var(--brand-dk);color:#fff}
-.btn-o{background:#fff;color:var(--ink);border:1px solid var(--line);font-weight:600}
-.btn-o:hover{background:var(--brand-wash);border-color:var(--brand-soft)}
-.tag{font-family:var(--head);font-size:11px;font-weight:700;padding:4px 9px;border-radius:5px;
-  display:inline-block;white-space:nowrap;text-transform:uppercase;letter-spacing:.05em}
-.t-b{background:var(--brand-soft);color:var(--brand-deep)}
+.btn{font-family:var(--f);background:var(--blue);color:#fff;font-size:14px;font-weight:600;
+  padding:11px 22px;border-radius:22px;letter-spacing:-.01em;transition:background .12s}
+.btn:hover{background:var(--blue-dk)}
+.btn-o{background:#fff;color:var(--ink);border:1px solid var(--ink);font-weight:600}
+.btn-o:hover{background:var(--ink);color:#fff}
+/* Payoneer's secondary action is not a button at all — a bold uppercase link. */
+.lnk{color:var(--ink);font-weight:700;font-size:14px;letter-spacing:.02em;
+  text-transform:uppercase;cursor:pointer;white-space:nowrap}
+.lnk:hover{color:var(--blue)}
+.blue{color:var(--blue);font-weight:500;cursor:pointer}
+.blue:hover{text-decoration:underline}
+
+.tag{font-size:12px;font-weight:600;padding:4px 10px;border-radius:14px;display:inline-block;
+  white-space:nowrap}
+.t-b{background:var(--blue-soft);color:var(--blue-dk)}
 .t-g{background:var(--good-soft);color:var(--good-dk)}
 .t-w{background:var(--warn-soft);color:var(--warn-dk)}
 .t-r{background:var(--bad-soft);color:var(--bad-dk)}
 .t-n{background:var(--line2);color:var(--muted)}
-.err{background:var(--bad-soft);color:var(--bad-dk);padding:11px 14px;border-radius:8px;
-  font-size:13px;margin-bottom:16px}
+.err{background:var(--bad-soft);color:var(--bad-dk);padding:12px 15px;border-radius:8px;
+  font-size:13px;margin-bottom:16px;line-height:1.6}
 
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px}
-.ch{display:flex;align-items:center;gap:9px;padding-bottom:14px;margin-bottom:16px;
-  border-bottom:1px solid var(--line2)}
-.ch i{font-size:17px;color:var(--brand-dk)}
-.ch h3{font-size:16px;font-weight:600}
-.ch .r{margin-left:auto;font-family:var(--mono);font-size:13px;color:var(--muted)}
-.av{border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  width:34px;height:34px;font-family:var(--head);font-size:12px;font-weight:700;
-  background:var(--brand-soft);color:var(--brand-deep)}
+/* ---- Payoneer's alert strip: soft peach, amber icon, bold uppercase link ---- */
+.alert{background:var(--warn-soft);border-radius:8px;padding:16px 20px;
+  display:flex;align-items:center;gap:14px;margin-bottom:34px}
+.alert i{font-size:20px;color:var(--warn);flex-shrink:0}
+.alert .t{flex:1;min-width:0;font-size:15px;color:var(--ink)}
+.alert.bad{background:var(--bad-soft)} .alert.bad i{color:var(--bad)}
 
-#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
-  background:var(--shell)}
-#login .box{background:#fff;border-radius:14px;padding:40px;width:100%;max-width:400px}
-.mark{width:40px;height:40px;border-radius:9px;background:var(--brand);color:#062B20;
-  display:flex;align-items:center;justify-content:center;font-family:var(--head);
-  font-size:21px;font-weight:700}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:22px 24px}
+.ch{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.ch i{font-size:18px;color:var(--ink)}
+.ch h3{font-size:17px;font-weight:600}
+.ch .r{margin-left:auto;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.av{border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  width:36px;height:36px;font-size:13px;font-weight:600;background:var(--surface);color:var(--ink)}
 
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+#login .box{background:#fff;border:1px solid var(--line);border-radius:14px;padding:44px;
+  width:100%;max-width:420px}
+.mark{width:42px;height:42px;border-radius:11px;background:var(--orange);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700}
+
+/* ================= THE SHELL: top bar, no sidebar ================= */
 #app{display:none}
-.wrap{display:flex;min-height:100vh;align-items:stretch}
+.bar{position:sticky;top:0;z-index:6;background:#fff;display:flex;align-items:center;
+  gap:18px;padding:20px 40px;border-bottom:1px solid transparent}
+.bar.stuck{border-bottom-color:var(--line)}
+.burger{font-size:26px;color:var(--ink);cursor:pointer;line-height:1}
+.bar h1{font-size:24px;font-weight:600;letter-spacing:-.02em;flex:1;min-width:0}
+.bar .ic{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;color:var(--ink);cursor:pointer;position:relative}
+.bar .ic:hover{background:var(--surface)}
+.bar .ic i{font-size:21px}
+.bar .dot{position:absolute;top:2px;right:2px;min-width:17px;height:17px;padding:0 4px;
+  border-radius:9px;background:var(--bad);color:#fff;font-size:11px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums}
+.bar .me{display:flex;align-items:center;gap:10px;cursor:pointer;padding-left:8px}
+.bar .me .av{background:#3D4EA8;color:#fff}
+.bar .me span{font-size:14px;color:var(--ink);font-weight:500}
+.bar .sep{width:1px;height:22px;background:var(--line)}
 
-/* Sidebar: near-black, like the Termii console. */
-.side{width:236px;flex-shrink:0;background:var(--shell);padding:22px 14px;
-  display:flex;flex-direction:column;position:sticky;top:0;
-  height:100vh;overflow-y:auto}
-/* If the nav ever outgrows the viewport it scrolls inside the black, rather
-   than spilling nav items onto the white page. */
-.side::-webkit-scrollbar{width:0}
-.brand{display:flex;align-items:center;gap:11px;padding:0 8px 26px}
-.brand .t{font-family:var(--head);font-size:19px;font-weight:700;color:#fff}
-.slab{font-family:var(--head);font-size:11px;font-weight:600;color:#5A6070;letter-spacing:.1em;
-  text-transform:uppercase;padding:20px 10px 8px}
-.nav{display:flex;align-items:center;gap:12px;padding:10px;border-radius:7px;
-  color:var(--shell-tx);font-family:var(--head);font-size:14px;font-weight:500;
-  cursor:pointer;margin-bottom:1px;border-left:2px solid transparent}
-.nav i{font-size:18px}
-.nav:hover{background:var(--shell-2);color:#fff}
-.nav.on{background:var(--shell-2);color:#fff;border-left-color:var(--brand)}
-.nav.on i{color:var(--brand)}
-.nav .n{margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:500;
-  background:var(--bad);color:#fff;padding:1px 7px;border-radius:9px}
-.who{margin-top:auto;padding:16px 10px 0;border-top:1px solid var(--shell-line);
-  display:flex;align-items:center;gap:11px}
-.who .av{background:var(--shell-2);color:var(--brand)}
-.who > div > div:first-child{color:#fff!important}
+/* the nav lives in a drawer, exactly as Payoneer hides it */
+.scrim{position:fixed;inset:0;background:rgba(16,16,32,.4);z-index:8;display:none}
+.scrim.on{display:block}
+.draw{position:fixed;left:0;top:0;bottom:0;width:280px;background:#fff;z-index:9;
+  padding:22px 14px;transform:translateX(-100%);transition:transform .18s ease;
+  overflow-y:auto;display:flex;flex-direction:column}
+.draw.on{transform:none}
+.draw .brand{display:flex;align-items:center;gap:12px;padding:0 10px 26px}
+.draw .brand .t{font-size:20px;font-weight:700;color:var(--ink);letter-spacing:-.03em}
+.slab{font-size:12px;font-weight:600;color:var(--faint);padding:20px 12px 8px}
+.nav{display:flex;align-items:center;gap:14px;padding:11px 12px;border-radius:8px;
+  color:var(--body);font-size:15px;font-weight:500;cursor:pointer;margin-bottom:1px}
+.nav i{font-size:20px;color:var(--muted)}
+.nav:hover{background:var(--surface)}
+.nav.on{background:var(--blue-soft);color:var(--blue-dk);font-weight:600}
+.nav.on i{color:var(--blue)}
+.nav .n{margin-left:auto;font-size:12px;font-weight:600;background:var(--bad);color:#fff;
+  padding:1px 8px;border-radius:10px;font-variant-numeric:tabular-nums}
 
-.main{flex:1;min-width:0;padding:30px 36px}
-.top{display:flex;justify-content:space-between;align-items:flex-end;
-  margin-bottom:26px;gap:16px;flex-wrap:wrap}
-.top h1{font-size:28px;font-weight:600;line-height:1.2}
-.top .sub{font-size:14px;color:var(--muted);margin-top:3px}
+.main{padding:0 40px 60px;max-width:1220px}
 
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:22px}
-.kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 20px}
-.kpi .l{font-family:var(--head);font-size:12px;font-weight:600;color:var(--muted);
-  text-transform:uppercase;letter-spacing:.06em}
-.kpi .v{font-family:var(--mono);font-size:30px;font-weight:500;color:var(--ink);
-  line-height:1.2;margin-top:8px;font-variant-numeric:tabular-nums}
-.kpi .d{font-size:12px;margin-top:4px}
-.kpi.acc{border-left:3px solid var(--brand)}
-.kpi.bad{border-left:3px solid var(--bad)}
-.kpi.warn{border-left:3px solid var(--warn)}
+/* ---- the "Balances" pattern: a grey section label, a running total, cards ---- */
+.sec{margin-bottom:34px}
+.sec .lab{font-size:19px;font-weight:600;color:var(--muted);letter-spacing:-.01em}
+.sec .tot{font-size:15px;color:var(--body);margin:6px 0 18px}
+.sec .tot b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
 
-.g2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
-.col{display:flex;flex-direction:column;gap:16px}
-.bar{height:7px;background:var(--line2);border-radius:4px;overflow:hidden;flex:1}
-.bar>div{height:7px;border-radius:4px}
-.meter{margin-bottom:18px}
+.bals{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:22px}
+.bal{background:#fff;border:1px solid var(--line);border-radius:10px;padding:22px 24px;
+  display:flex;align-items:center;gap:16px;cursor:pointer;transition:box-shadow .12s}
+.bal:hover{box-shadow:0 2px 12px rgba(26,26,46,.07)}
+.bal .ico{width:44px;height:44px;border-radius:50%;flex-shrink:0;display:flex;
+  align-items:center;justify-content:center}
+.bal .ico i{font-size:22px;color:#fff}
+.bal .v{flex:1;min-width:0;font-size:23px;font-weight:600;color:var(--ink);
+  letter-spacing:-.025em;font-variant-numeric:tabular-nums}
+.bal .v small{display:block;font-size:13px;font-weight:400;color:var(--muted);
+  letter-spacing:0;margin-top:2px}
+.bal > i{font-size:20px;color:var(--faint)}
+
+/* ---- Payoneer's tabs: blue underline on active ---- */
+.tabs{display:flex;align-items:center;gap:32px;border-bottom:1px solid var(--line);
+  margin-bottom:4px}
+.tab{padding:12px 2px;font-size:15px;font-weight:500;color:var(--muted);cursor:pointer;
+  border-bottom:3px solid transparent;margin-bottom:-1px}
+.tab.on{color:var(--ink);font-weight:600;border-bottom-color:var(--blue)}
+.tabs .more{margin-left:auto;font-size:14px;color:var(--blue);font-weight:500;cursor:pointer;
+  display:flex;align-items:center;gap:4px}
+
+.empty{text-align:center;padding:64px 20px;font-size:24px;font-weight:500;color:var(--faint);
+  letter-spacing:-.02em}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:18px;margin-bottom:26px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px 22px}
+.kpi .l{font-size:13px;font-weight:500;color:var(--muted)}
+.kpi .v{font-size:29px;font-weight:600;color:var(--ink);line-height:1.2;margin-top:8px;
+  letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.kpi .d{font-size:13px;margin-top:4px}
+.kpi.acc .v{color:var(--blue)}
+.kpi.bad .v{color:var(--bad)}
+.kpi.warn .v{color:var(--warn-dk)}
+
+.g2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px}
+.col{display:flex;flex-direction:column;gap:22px}
+.bar2,.bar{height:8px;background:var(--line2);border-radius:5px;overflow:hidden;flex:1}
+.bar>div{height:8px;border-radius:5px}
+.meter{margin-bottom:20px}
 .meter:last-child{margin-bottom:0}
 
 table{width:100%;border-collapse:collapse}
-th{font-family:var(--head);font-size:11px;font-weight:700;color:var(--muted);text-align:left;
-  padding:0 14px 12px;text-transform:uppercase;letter-spacing:.06em}
-td{padding:13px 14px;border-top:1px solid var(--line2);font-size:14px;vertical-align:middle}
-/* Phone numbers, codes, counts — mono, so a column reads down cleanly. */
-td.muted{font-family:var(--mono);font-size:13px}
+th{font-size:13px;font-weight:500;color:var(--muted);text-align:left;padding:0 16px 14px}
+td{padding:15px 16px;border-top:1px solid var(--line2);font-size:14px;vertical-align:middle}
+td.num,td.muted{font-variant-numeric:tabular-nums}
 tbody tr{cursor:pointer}
-tbody tr:hover{background:var(--brand-wash)}
+tbody tr:hover{background:var(--surface)}
 tr.flag{background:var(--bad-soft)}
-tr.flag:hover{background:#FBDFDF}
+tr.flag:hover{background:#FBDEDC}
 
-.li{display:flex;align-items:center;gap:13px;padding:13px 0;border-top:1px solid var(--line2)}
+.li{display:flex;align-items:center;gap:14px;padding:15px 0;border-top:1px solid var(--line2)}
 .li:first-of-type{border-top:none}
-.li .g,.gicon{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;
+.li .g,.gicon{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;
   justify-content:center;flex-shrink:0}
-.li .g i,.gicon i{font-size:17px;color:#fff}
+.li .g i,.gicon i{font-size:18px;color:#fff}
 
-.svc{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:10px}
-.sv{border:1px solid var(--line);border-radius:10px;padding:14px 10px;text-align:center}
-.sv.on{background:var(--brand);border-color:var(--brand)}
-.sv .l{font-family:var(--head);font-size:12px;font-weight:600;color:var(--muted)}
-.sv .v{font-family:var(--mono);font-size:26px;font-weight:500;color:var(--ink);
+.svc{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:12px}
+.sv{border:1px solid var(--line);border-radius:10px;padding:16px 10px;text-align:center}
+.sv.on{background:var(--blue);border-color:var(--blue)}
+.sv .l{font-size:13px;font-weight:500;color:var(--muted)}
+.sv .v{font-size:27px;font-weight:600;color:var(--ink);letter-spacing:-.03em;
   font-variant-numeric:tabular-nums;line-height:1.25}
-.sv.on .l{color:#0A5540} .sv.on .v{color:#062B20}
+.sv.on .l{color:#BFD5F7} .sv.on .v{color:#fff}
 
-.note{background:var(--brand-wash);border:1px solid var(--brand-soft);border-radius:10px;
-  padding:18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.note{background:var(--blue-wash);border:1px solid var(--blue-soft);border-radius:10px;
+  padding:20px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
 
-.mbg{position:fixed;inset:0;background:rgba(13,15,20,.6);display:flex;align-items:flex-start;
-  justify-content:center;padding:40px 16px;overflow-y:auto;z-index:9}
-.modal{background:#fff;border-radius:14px;padding:30px;width:100%;max-width:680px}
-.sect{font-family:var(--head);font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;
-  text-transform:uppercase;margin:26px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.mbg{position:fixed;inset:0;background:rgba(16,16,32,.5);display:flex;align-items:flex-start;
+  justify-content:center;padding:44px 16px;overflow-y:auto;z-index:10}
+.modal{background:#fff;border-radius:14px;padding:34px;width:100%;max-width:680px}
+.sect{font-size:13px;font-weight:600;color:var(--ink);margin:28px 0 16px;
+  padding-bottom:10px;border-bottom:1px solid var(--line)}
 .sect:first-of-type{margin-top:0}
-.row{display:flex;justify-content:space-between;gap:16px;padding:9px 0;font-size:14px}
+.row{display:flex;justify-content:space-between;gap:16px;padding:10px 0;font-size:14px}
 .row .k{color:var(--muted)}
-.row .v{color:var(--ink);font-weight:600;text-align:right;font-family:var(--mono);
-  font-size:13px;font-weight:500}
-.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
-.gg2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media(max-width:900px){.wrap{flex-direction:column}.side{width:100%;height:auto;position:static}
-  .main{padding:20px}.g2,.g3,.gg2{grid-template-columns:1fr}}
+.row .v{color:var(--ink);font-weight:500;text-align:right;font-variant-numeric:tabular-nums}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.gg2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+input[type=checkbox]{width:18px;height:18px;padding:0;accent-color:var(--blue);cursor:pointer}
+input[type=color]{padding:3px;height:44px}
+@media(max-width:820px){.bar{padding:16px 20px}.main{padding:0 20px 50px}
+  .g2,.g3,.gg2{grid-template-columns:1fr}.bar h1{font-size:20px}}
 </style>
 </head>
 <body>
@@ -191,47 +228,57 @@ tr.flag:hover{background:#FBDFDF}
   </div>
 </div>
 
-<div id="app"><div class="wrap">
-  <div class="side">
+<div id="app">
+  <div class="scrim" id="scrim" onclick="menu(false)"></div>
+
+  <div class="draw" id="draw">
     <div class="brand"><div class="mark">H</div><div class="t">Hispren</div></div>
     <div class="slab">Church</div>
-    <div class="nav on" data-v="home"       onclick="go('home')"><i class="ti ti-layout-dashboard"></i>Overview</div>
+    <div class="nav on" data-v="home"       onclick="go('home')"><i class="ti ti-home"></i>Home</div>
     <div class="nav"    data-v="members"    onclick="go('members')"><i class="ti ti-users"></i>Members</div>
     <div class="nav"    data-v="lists"      onclick="go('lists')"><i class="ti ti-list-check"></i>Lists</div>
     <div class="nav"    data-v="attendance" onclick="go('attendance')"><i class="ti ti-qrcode"></i>Attendance</div>
     <div class="nav"    data-v="groups"     onclick="go('groups')"><i class="ti ti-sitemap"></i>Groups</div>
     <div class="nav"    data-v="families"   onclick="go('families')"><i class="ti ti-home-heart"></i>Families</div>
     <div class="nav"    data-v="calendar"   onclick="go('calendar')"><i class="ti ti-calendar"></i>Calendar</div>
-    <div class="nav"    data-v="followups"  onclick="go('followups')"><i class="ti ti-phone-call"></i>Follow-ups<span id="tBadge"></span></div>
-    <div class="nav"    data-v="care"       onclick="go('care')"><i class="ti ti-heart-handshake"></i>Pastoral care</div>
-    <div class="nav"    data-v="messages"   onclick="go('messages')"><i class="ti ti-message-2"></i>Messages</div>
-    <div class="nav"    data-v="reports"    onclick="go('reports')"><i class="ti ti-chart-line"></i>Reports</div>
+
     <div class="slab">Money</div>
     <div class="nav"    data-v="giving"     onclick="go('giving')"><i class="ti ti-coins"></i>Giving</div>
     <div class="nav"    data-v="finance"    onclick="go('finance')"><i class="ti ti-report-money"></i>Finance</div>
+
+    <div class="slab">People work</div>
+    <div class="nav"    data-v="followups"  onclick="go('followups')"><i class="ti ti-checkbox"></i>Follow-ups<span id="tBadge"></span></div>
+    <div class="nav"    data-v="care"       onclick="go('care')"><i class="ti ti-heart-handshake"></i>Pastoral care</div>
+    <div class="nav"    data-v="messages"   onclick="go('messages')"><i class="ti ti-message-2"></i>Messages</div>
+    <div class="nav"    data-v="reports"    onclick="go('reports')"><i class="ti ti-chart-line"></i>Reports</div>
+
     <div class="slab">Data</div>
     <div class="nav"    data-v="duplicates" onclick="go('duplicates')"><i class="ti ti-copy"></i>Duplicates<span id="dBadge"></span></div>
     <div class="nav"    data-v="import"     onclick="go('import')"><i class="ti ti-file-import"></i>Import</div>
     <div class="nav"    data-v="export"     onclick="go('export')"><i class="ti ti-download"></i>Export</div>
     <div class="nav"    data-v="settings"   onclick="go('settings')"><i class="ti ti-settings"></i>Settings</div>
-    <div class="who">
+    <div class="nav" style="margin-top:auto" onclick="logout()"><i class="ti ti-logout"></i>Sign out</div>
+  </div>
+
+  <div class="bar" id="bar">
+    <div class="burger" onclick="menu(true)"><i class="ti ti-menu-2"></i></div>
+    <h1 id="hTitle">Home</h1>
+    <div class="ic" title="Help"><i class="ti ti-help-circle"></i></div>
+    <div class="ic" id="bell" onclick="go('duplicates')" title="Needs attention">
+      <i class="ti ti-bell"></i></div>
+    <div class="sep"></div>
+    <div class="me" onclick="go('settings')">
       <div class="av" id="pAv">—</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;color:var(--ink);overflow:hidden;
-          text-overflow:ellipsis;white-space:nowrap" id="pName">—</div>
-        <div class="muted" style="font-size:12px;cursor:pointer" onclick="logout()">Sign out</div>
-      </div>
+      <span id="pName">—</span>
+      <i class="ti ti-chevron-down" style="font-size:16px;color:var(--muted)"></i>
     </div>
   </div>
 
   <div class="main">
-    <div class="top">
-      <div><h1 id="hTitle">Overview</h1><div class="sub" id="hSub">—</div></div>
-      <div style="display:flex;gap:9px" id="hActs"></div>
-    </div>
+    <div id="alerts"></div>
     <div id="view"></div>
   </div>
-</div></div>
+</div>
 <div id="modal"></div>
 
 <script>
@@ -264,6 +311,7 @@ async function boot(){
   ME=await api('/api/me');
   $('#login').style.display='none'; $('#app').style.display='block';
   $('#pName').textContent=ME.tenant.name; $('#pAv').textContent=ini(ME.tenant.name);
+  paintBell();
   MEMBERS=(await api('/api/members?limit=300')).members;
   DUPES=await api('/api/duplicates').catch(()=>[]);
   [STAGES,GROUPS,STATES,FIELDS,USERS,TASKS]=await Promise.all([
@@ -277,10 +325,70 @@ async function boot(){
   $('#tBadge').outerHTML = od
     ? `<span class="n" id="tBadge">${od}</span>` : '<span id="tBadge"></span>';
   $('#dBadge').outerHTML=DUPES.length?`<span class="n" id="dBadge">${DUPES.length}</span>`:'<span id="dBadge"></span>';
+  paintBell();
   go('home');
 }
-function head(t,s,a=''){ $('#hTitle').textContent=t; $('#hSub').textContent=s; $('#hActs').innerHTML=a; }
+/**
+ * Payoneer puts the page name in the TOP BAR, not in the content. The content
+ * then opens with a grey section label and a running total. So does this.
+ *
+ *   head(title, subtitle, actions)
+ */
+function head(t, sub, acts=''){
+  $('#hTitle').textContent = t;
+  window._sub  = sub || '';
+  window._acts = acts || '';
+}
+
+/**
+ * The "Balances" block. Payoneer's whole dashboard is built on it: a grey
+ * label, a running total, then cards you can walk into.
+ *
+ *   section('Members', 'Total on the roll: <b>1,832</b>', [ {...cards} ])
+ */
+function section(label, total, cards, acts=''){
+  return `
+  <div class="sec">
+    <div style="display:flex;align-items:flex-start">
+      <div style="flex:1;min-width:0">
+        <div class="lab">${label}</div>
+        ${total?`<div class="tot">${total}</div>`:'<div style="height:14px"></div>'}
+      </div>
+      ${acts?`<div style="display:flex;gap:12px;align-items:center">${acts}</div>`:''}
+    </div>
+    ${cards?`<div class="bals">${cards}</div>`:''}
+  </div>`;
+}
+
+/** One balance card: coloured circle, big figure, a chevron into it. */
+function bal(colour, icon, value, label, onclick){
+  return `<div class="bal" onclick="${onclick}">
+    <div class="ico" style="background:${colour}"><i class="ti ti-${icon}"></i></div>
+    <div class="v">${value}<small>${label}</small></div>
+    <i class="ti ti-chevron-right"></i>
+  </div>`;
+}
+
+/** Payoneer's alert strip: peach, amber icon, bold uppercase link. */
+function alertStrip(text, action, onclick, bad){
+  return `<div class="alert ${bad?'bad':''}">
+    <i class="ti ti-alert-triangle-filled"></i>
+    <div class="t">${text}</div>
+    <div class="lnk" onclick="${onclick}">${action}</div>
+  </div>`;
+}
+
+function menu(open){
+  $('#draw').classList.toggle('on', open);
+  $('#scrim').classList.toggle('on', open);
+}
+addEventListener('scroll',()=>{
+  const b=$('#bar'); if(b) b.classList.toggle('stuck', scrollY>4);
+});
 function go(v){
+  menu(false);
+  window._sub = window._acts = '';
+  $('#alerts').innerHTML = '';
   document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('on',n.dataset.v===v));
   // ONE router. Two of these once existed in the same file and the broken one
   // won, which is why Messages showed a screen whose every button was dead.
@@ -294,107 +402,181 @@ function go(v){
   };
   const f = R[v];
   if (!f) { console.error('no view for', v); return; }
-  f();
+
+  // Views set their subtitle/actions via head(). Home paints its own header;
+  // every other screen gets the standard Payoneer section block prepended.
+  Promise.resolve(f()).then(()=>{
+    if (v === 'home') return;
+    const view = $('#view');
+    if (!view || !window._sub && !window._acts) return;
+    if (view.firstElementChild && view.firstElementChild.classList.contains('sec')) return;
+    const hdr = document.createElement('div');
+    hdr.className = 'sec';
+    hdr.style.marginBottom = '26px';
+    hdr.innerHTML = `<div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <div class="lab" style="color:var(--ink);font-size:21px">${$('#hTitle').textContent}</div>
+        ${window._sub?`<div class="tot">${window._sub}</div>`:''}
+      </div>
+      <div style="display:flex;gap:12px;align-items:center">${window._acts||''}</div>
+    </div>`;
+    view.prepend(hdr);
+  });
+  scrollTo(0,0);
 }
 
-/* ============================== OVERVIEW ============================== */
+/**
+ * Payoneer's bell carries a red count of things needing you. So does this —
+ * and it counts the things a pastor should actually be woken for.
+ */
+function paintBell(){
+  const noc = MEMBERS.filter(m=>!m.phone&&!m.phone_2&&!m.email).length;
+  const n = DUPES.length + (noc?1:0);
+  const b = $('#bell'); if(!b) return;
+  b.querySelector('.dot')?.remove();
+  if(n){
+    const d=document.createElement('span');
+    d.className='dot'; d.textContent=DUPES.length||n;
+    b.appendChild(d);
+  }
+}
+
+/* ============================== HOME ============================== */
 function viewHome(){
-  const t=MEMBERS.length;
-  const call=MEMBERS.filter(m=>['visitor','first_timer'].includes(m.stage_key));
-  const noc=MEMBERS.filter(m=>!m.phone&&!m.phone_2&&!m.email).length;
-  const reach=t?Math.round((t-noc)/t*100):0;
-  const grouped=MEMBERS.filter(m=>m.home_group_name).length;
-  const gp=t?Math.round(grouped/t*100):0;
-  const svc=k=>MEMBERS.filter(m=>m.usual_service===k).length;
-  const S=[svc('1st Service'),svc('2nd Service'),svc('3rd Service')];
-  const top=Math.max(...S);
-  const gs=[...new Set(MEMBERS.map(m=>m.home_group_name).filter(Boolean))];
+  const t     = MEMBERS.length;
+  const call  = MEMBERS.filter(m=>['visitor','first_timer'].includes(m.stage_key));
+  const noc   = MEMBERS.filter(m=>!m.phone&&!m.phone_2&&!m.email).length;
+  const withE = MEMBERS.filter(m=>m.email).length;
+  const grp   = MEMBERS.filter(m=>m.home_group_name).length;
+  const svc   = k=>MEMBERS.filter(m=>m.usual_service===k).length;
+  const S     = [svc('1st Service'),svc('2nd Service'),svc('3rd Service')];
+  const top   = Math.max(...S);
+  const sunday = S.reduce((a,b)=>a+b,0);
 
-  head('Overview', ME.tenant.name,
-    `<button class="btn btn-o" onclick="visitorCard()">Visitor card</button>
-     <button class="btn" onclick="openForm()">Register member</button>`);
+  head('Home');
 
-  $('#view').innerHTML=`
-  <div class="kpis">
-    <div class="kpi acc"><div class="l">Members</div><div class="v">${t}</div>
-      <div class="d muted">${grouped} in a group</div></div>
-    <div class="kpi ${call.length?'warn':''}"><div class="l">Awaiting a call</div>
-      <div class="v">${call.length}</div>
-      <div class="d" style="color:${call.length?'var(--warn)':'var(--muted)'}">
-        ${call.length?'First 72 hours decide':'Nobody waiting'}</div></div>
-    <div class="kpi ${DUPES.length?'bad':''}"><div class="l">Duplicates</div>
-      <div class="v">${DUPES.length}</div>
-      <div class="d" style="color:${DUPES.length?'var(--bad)':'var(--muted)'}">
-        ${DUPES.length?'Need review':'Clean'}</div></div>
-    <div class="kpi"><div class="l">Reachable</div><div class="v">${reach}%</div>
-      <div class="d muted">${noc} with no contact</div></div>
-  </div>
+  // ── the one thing that most needs a human, right now ──
+  let strip = '';
+  if (DUPES.length) {
+    strip = alertStrip(
+      `You have <b>${DUPES.length} possible duplicate member${DUPES.length===1?'':'s'}</b> to review. `
+      + `Left alone, they get two welcome texts and count twice on your roll.`,
+      'REVIEW NOW', "go('duplicates')");
+  } else if (call.length) {
+    strip = alertStrip(
+      `<b>${call.length} first timer${call.length===1?'':'s'}</b> ${call.length===1?'is':'are'} waiting `
+      + `on a call. The first 72 hours decide whether they come back.`,
+      'CALL THEM', "go('lists')");
+  } else if (noc) {
+    strip = alertStrip(
+      `<b>${noc} member${noc===1?'':'s'}</b> have neither a phone number nor an email. `
+      + `You cannot reach them at all.`,
+      'FIX', "go('members')");
+  }
+  $('#alerts').innerHTML = strip;
+
+  $('#view').innerHTML = `
+
+  ${section('Your church',
+    `Total on the roll: <b>${t.toLocaleString()} member${t===1?'':'s'}</b>`,
+      bal('#3D4EA8','users',    t.toLocaleString(),
+          `${grp} in a cell or department`, "go('members')")
+    + bal('#00A868','building-church', sunday.toLocaleString(),
+          'Expected this Sunday', "go('attendance')")
+    + bal(call.length?'#F5A623':'#B8B8C4','phone-call', call.length.toLocaleString(),
+          call.length ? 'Waiting on a call' : 'Nobody waiting', "go('lists')")
+  )}
 
   <div class="g2">
-   <div class="col">
-    <div class="card">
-      <div class="ch"><i class="ti ti-phone-call"></i><h3>Follow-ups</h3>
-        <span class="r">${TASKS.length} open</span></div>
-      ${TASKS.slice(0,5).map(t=>`
-        <div class="li" onclick="go('followups')" style="cursor:pointer">
-          <div class="av">${ini(t.subject_name||t.title)}</div>
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:600;color:var(--ink)">${esc(t.title)}</div>
-            <div class="muted">${esc(t.owner||'unassigned')}${t.due_at
-              ?' · due '+new Date(t.due_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'}):''}</div>
-          </div>
-          <span class="tag ${t.overdue?'t-r':'t-w'}">${t.overdue?'Overdue':'Open'}</span>
-        </div>`).join('')||`<div class="muted">No open follow-ups.
-          ${call.length?`<b style="color:var(--ink)">${call.length} first-timer${call.length===1?'':'s'}
-          have nobody assigned</b> — <span style="color:var(--brand);cursor:pointer"
-          onclick="genTasks()">create the tasks</span>.`:''}</div>`}
-    </div>
-
-    <div class="card">
-      <div class="ch"><i class="ti ti-activity"></i><h3>Data health</h3></div>
-      <div class="meter">
-        <div style="display:flex;justify-content:space-between;margin-bottom:7px">
-          <div><div style="font-weight:600;color:var(--ink);font-size:14px">Members we can reach</div>
-            <div class="muted">${t-noc} of ${t} have a phone or email</div></div>
-          <div class="num" style="font-size:18px">${reach}%</div></div>
-        <div class="bar"><div style="width:${reach}%;background:${reach>80?'var(--good)':'var(--warn)'}"></div></div>
-      </div>
-      <div class="meter">
-        <div style="display:flex;justify-content:space-between;margin-bottom:7px">
-          <div><div style="font-weight:600;color:var(--ink);font-size:14px">In a cell or department</div>
-            <div class="muted">${grouped} of ${t} — nobody should be invisible</div></div>
-          <div class="num" style="font-size:18px">${gp}%</div></div>
-        <div class="bar"><div style="width:${gp}%;background:${gp>70?'var(--good)':'var(--warn)'}"></div></div>
+    <div>
+      <div class="sec" style="margin-bottom:0">
+        <div class="lab" style="color:var(--ink);font-size:21px">Who needs you</div>
+        <div class="tot">The people, not the numbers</div>
+        <div class="tabs">
+          <div class="tab on" id="tab1" onclick="homeTab(1)">Waiting on a call</div>
+          <div class="tab"    id="tab2" onclick="homeTab(2)">Cannot be reached</div>
+          <div class="more" onclick="go('lists')">View all <i class="ti ti-chevron-right"
+            style="font-size:15px"></i></div>
+        </div>
+        <div id="homeList"></div>
       </div>
     </div>
-   </div>
 
-   <div class="col">
-    <div class="card">
-      <div class="ch"><i class="ti ti-building-church"></i><h3>By service</h3>
-        <span class="r">${t} members</span></div>
-      <div class="svc">
-        ${['1st','2nd','3rd'].map((l,i)=>`<div class="sv ${top&&S[i]===top?'on':''}">
-          <div class="l">${l}</div><div class="v">${S[i]}</div></div>`).join('')}
+    <div class="col">
+      <div class="card">
+        <div class="ch"><i class="ti ti-building-church"></i><h3>By service</h3>
+          <span class="r">${t} members</span></div>
+        <div class="svc">
+          ${['1st','2nd','3rd'].map((l,i)=>`<div class="sv ${top&&S[i]===top?'on':''}">
+            <div class="l">${l}</div><div class="v">${S[i]}</div></div>`).join('')}
+        </div>
+        <div class="muted" style="margin-top:14px;line-height:1.7">
+          One attendance number hides which service is carrying the church.</div>
       </div>
-      <div class="muted" style="margin-top:14px">
-        A single attendance number hides which service is growing.</div>
-    </div>
 
-    <div class="card">
-      <div class="ch"><i class="ti ti-layout-grid"></i><h3>Groups</h3>
-        <span class="r">${gs.length}</span></div>
-      ${gs.map((g,i)=>{const n=MEMBERS.filter(m=>m.home_group_name===g).length;
-        return `<div class="li" onclick="go('members')" style="cursor:pointer">
-          <div class="g" style="background:${GC[i%4]}"><i class="ti ti-${GI[i%4]}"></i></div>
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:600;color:var(--ink)">${esc(g)}</div>
-            <div class="muted">${n} member${n===1?'':'s'}</div></div>
-          <i class="ti ti-chevron-right" style="color:var(--faint)"></i>
-        </div>`;}).join('')||'<div class="muted">No groups yet.</div>'}
+      <div class="card">
+        <div class="ch"><i class="ti ti-mail"></i><h3>What it costs to reach them</h3></div>
+        <div class="meter">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+            <div><div style="font-weight:600;color:var(--ink);font-size:14px">Free — by email</div>
+              <div class="muted">${withE} of ${t}</div></div>
+            <div class="num" style="font-size:16px;color:var(--good-dk)">
+              ${t?Math.round(withE/t*100):0}%</div></div>
+          <div class="bar"><div style="width:${t?withE/t*100:0}%;background:var(--good)"></div></div>
+        </div>
+        <div class="meter">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+            <div><div style="font-weight:600;color:var(--ink);font-size:14px">Paid — by SMS</div>
+              <div class="muted">${t-withE-noc} with a phone but no email</div></div>
+            <div class="num" style="font-size:16px;color:var(--warn-dk)">
+              NGN ${((t-withE-noc)*4.5).toLocaleString()}</div></div>
+          <div class="bar"><div style="width:${t?(t-withE-noc)/t*100:0}%;background:var(--warn)"></div></div>
+        </div>
+        ${noc?`<div class="meter">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+            <div><div style="font-weight:600;color:var(--ink);font-size:14px">Unreachable</div>
+              <div class="muted">No phone, no email</div></div>
+            <div class="num" style="font-size:16px;color:var(--bad)">${noc}</div></div>
+          <div class="bar"><div style="width:${t?noc/t*100:0}%;background:var(--bad)"></div></div>
+        </div>`:''}
+        <div class="muted" style="margin-top:6px;line-height:1.7">
+          One message to everyone costs <b style="color:var(--ink)">NGN ${(t*4.5).toLocaleString()}</b>
+          by SMS, or <b style="color:var(--ink)">NGN ${((t-withE-noc)*4.5).toLocaleString()}</b>
+          if you send by email first. <span class="blue" onclick="go('messages')">Send one</span></div>
+      </div>
     </div>
-   </div>
   </div>`;
+
+  homeTab(1);
+}
+
+/** Payoneer's Latest / Upcoming tabs. Ours are the two lists that matter. */
+function homeTab(n){
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('on', i===n-1));
+  const call = MEMBERS.filter(m=>['visitor','first_timer'].includes(m.stage_key));
+  const noc  = MEMBERS.filter(m=>!m.phone&&!m.phone_2&&!m.email);
+  const rows = n===1 ? call : noc;
+
+  $('#homeList').innerHTML = rows.length ? rows.slice(0,7).map(m=>`
+    <div class="li">
+      <div class="av" onclick="openMember('${m.id}')" style="cursor:pointer">${ini(m.full_name)}</div>
+      <div style="flex:1;min-width:0;cursor:pointer" onclick="openMember('${m.id}')">
+        <div style="font-weight:600;color:var(--ink)">${esc(m.full_name)}</div>
+        <div class="muted">${esc(m.stage_label||'')} · ${esc(m.home_group_name||'no group')}</div>
+      </div>
+      ${m.phone||m.phone_2
+        ? `<a href="tel:${esc(m.phone||m.phone_2)}" onclick="event.stopPropagation()"
+             class="blue" style="padding:8px;text-decoration:none"><i class="ti ti-phone"
+             style="font-size:20px"></i></a>`
+        : ''}
+      ${m.phone||m.phone_2||m.email
+        ? `<i class="ti ti-message-2" style="font-size:20px;color:var(--blue);cursor:pointer;padding:8px"
+             onclick="event.stopPropagation();messageThese(['${m.id}'],'${esc(m.full_name)}')"></i>`
+        : `<span class="tag t-r">unreachable</span>`}
+    </div>`).join('')
+  : `<div class="empty">${n===1
+      ? 'Nobody is waiting. Good.'
+      : 'Everyone can be reached.'}</div>`;
 }
 
 /* =============================== MEMBERS ============================== */

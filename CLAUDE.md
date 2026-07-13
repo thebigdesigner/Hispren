@@ -57,50 +57,61 @@ processing, no transaction fees. Finance module RECORDS and RECONCILES only.
 - Redis for queue + cache
 - Wildcard DNS `*.hispren.com` → edge → tenant resolution
 
-## Design system
+## Design system — Payoneer
 
-TYPE — three faces, each with a job. Never mix them up.
-  DM Sans   headings, buttons, nav, labels, tags        400 / 500 / 600 / 700
-  Karla     body prose                                  400 / 500 / 600 / 700
-  DM Mono   EVERY FIGURE — counts, phone numbers, member codes, balances, IDs
-            400 / 500, font-variant-numeric: tabular-nums
+THE CONCEPT
+  Payoneer's dashboard has NO SIDEBAR. A hamburger, the page name, and that is
+  it. The nav hides so the CONTENT is the hero. Then: an alert strip if
+  something needs you, a "Balances" block, and a tabbed activity list.
 
-  The mono rule is not decoration. A column of phone numbers or attendance
-  counts must line up digit-under-digit or the table cannot be scanned. If it
-  is a number, it is DM Mono. No exceptions.
+  Their orange lives in the LOGO. The interface accent is BLUE — the active tab
+  underline, "View all >". Orange/amber appears only in the alert strip.
 
-LAYOUT — Termii console.
-- Near-black sidebar (#0D0F14, 236px). White cards on a #F7F8FA canvas.
-- Sidebar: brand mark + wordmark, then slab labels (CHURCH / DATA) over nav groups.
-  ACTIVE nav = #171A21 background + 2px GREEN left border + green icon + white text.
-  Inactive = #8B92A0. Tenant identity pinned to the bottom, above a hairline.
-- Page header: 28px DM Sans title + muted subtitle left, actions right.
-- KPI row: 3px coloured left border stating the KPI's condition —
-  green = fine, amber = someone is waiting, red = something is wrong.
-  Label in caps DM Sans, big DM Mono figure, one line of context.
-- Cards: white, 1px #E8EAEE, 12px radius, header with icon + rule beneath.
-- Tables: uppercase micro headers, hairline rows, brand-wash hover.
-  Flagged rows tinted red.
+TYPE
+  Inter, everywhere. 400 / 500 / 600 / 700.
+  Every figure carries font-variant-numeric: tabular-nums and -.02em tracking,
+  so a column of naira lines up under itself.
+
+SHELL
+  Top bar (sticky, white, borderless until you scroll):
+    hamburger + page title | help · bell (red count) · avatar + church name
+  Drawer nav slides from the left over a scrim. Active = pale blue pill.
+  Content: white, max-width 1220px, 40px gutters, generous air.
+
+THE BALANCES PATTERN — use it on every screen
+  1. A grey section label ("Your church", "Funds", "Members")
+  2. A running total in body text with the FIGURE in bold ink
+  3. Cards you can walk into: coloured circle + big figure + one line + chevron
+
+  Payoneer's whole dashboard is this. Every Hispren screen has one number that
+  matters — how many members, how much is held, how many are waiting for a call.
+
+THE ALERT STRIP
+  Soft peach (#FDF1E7), amber triangle, the message, and a BOLD UPPERCASE LINK
+  on the right — not a button. One at a time, and only when something genuinely
+  needs a human.
+
+TABS
+  Blue 3px underline on the active one. "View all >" in blue on the right.
+  Empty state is large, light grey, centred: "Nobody is waiting. Good."
 
 PALETTE
-  --ink        #12141A   headings
-  --body       #4A4F5C   prose
-  --muted      #8B92A0   secondary
-  --brand      #00C389   THE one green. Buttons, active nav, healthy state.
-  --brand-deep #00674A   text on a green tint
-  --warn       #F5A623   someone is waiting
-  --bad        #E5484D   something is wrong
-  --shell      #0D0F14   sidebar
-  --shell-2    #171A21   active nav
-  --canvas     #F7F8FA   --card #FFFFFF   --line #E8EAEE
+  --ink        #1A1A2E   headings, figures
+  --body       #4A4A5A   prose
+  --muted      #8A8A9C   section labels, secondary
+  --faint      #B8B8C4   chevrons, empty states
+  --blue       #1A5FD0   THE interactive colour. Buttons, links, active tab.
+  --orange     #FF4800   the logo mark ONLY. Never in the interface.
+  --good       #00A868   --warn #F5A623   --bad #E5342A
+  --canvas     #FFFFFF   --surface #F7F7FA   --line #E2E2E8
 
 RULES
-- One green. Never introduce a second accent.
-- Text on the green button is #062B20, not white — white on #00C389 fails contrast.
-- Colour states data, never decorates it. If nothing is wrong the screen is calm.
-- Multi-service is first-class: 1st/2nd/3rd as separate tiles, the largest filled
-  green. Never a single undifferentiated attendance number.
-- Tenant brand_color may override --brand only.
+- Buttons are fully rounded (22px), solid blue, white text.
+- The secondary action is not a button — it is a BOLD UPPERCASE LINK.
+- Borders are 1px #E2E2E8. No shadows except a whisper on card hover.
+- Colour states data, never decorates it.
+- Multi-service is first-class: 1st/2nd/3rd tiles, the largest filled blue.
+- Tenant brand_color may override --blue only.
 
 ## Nigerian market constraints (do not "optimise" these away)
 
