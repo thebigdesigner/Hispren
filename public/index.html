@@ -80,45 +80,52 @@ label{display:block;font-size:13px;font-weight:500;color:var(--body);margin-bott
 .mark{width:42px;height:42px;border-radius:11px;background:var(--orange);color:#fff;
   display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700}
 
-/* ================= THE SHELL: top bar, no sidebar ================= */
+/* ================= THE SHELL =================
+   Payoneer: a permanent DARK sidebar, a white content field, and the utility
+   cluster floating top-right with no bar behind it. The page title is large and
+   sits in the content, not in a chrome bar. */
 #app{display:none}
-.bar{position:sticky;top:0;z-index:6;background:#fff;display:flex;align-items:center;
-  gap:18px;padding:20px 40px;border-bottom:1px solid transparent}
-.bar.stuck{border-bottom-color:var(--line)}
-.burger{font-size:26px;color:var(--ink);cursor:pointer;line-height:1}
-.bar h1{font-size:24px;font-weight:600;letter-spacing:-.02em;flex:1;min-width:0}
-.bar .ic{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;
-  justify-content:center;color:var(--ink);cursor:pointer;position:relative}
-.bar .ic:hover{background:var(--surface)}
-.bar .ic i{font-size:21px}
-.bar .dot{position:absolute;top:2px;right:2px;min-width:17px;height:17px;padding:0 4px;
-  border-radius:9px;background:var(--bad);color:#fff;font-size:11px;font-weight:600;
-  display:flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums}
-.bar .me{display:flex;align-items:center;gap:10px;cursor:pointer;padding-left:8px}
-.bar .me .av{background:#3D4EA8;color:#fff}
-.bar .me span{font-size:14px;color:var(--ink);font-weight:500}
-.bar .sep{width:1px;height:22px;background:var(--line)}
+.wrap{display:flex;min-height:100vh}
 
-/* the nav lives in a drawer, exactly as Payoneer hides it */
-.scrim{position:fixed;inset:0;background:rgba(16,16,32,.4);z-index:8;display:none}
-.scrim.on{display:block}
-.draw{position:fixed;left:0;top:0;bottom:0;width:280px;background:#fff;z-index:9;
-  padding:22px 14px;transform:translateX(-100%);transition:transform .18s ease;
-  overflow-y:auto;display:flex;flex-direction:column}
-.draw.on{transform:none}
-.draw .brand{display:flex;align-items:center;gap:12px;padding:0 10px 26px}
-.draw .brand .t{font-size:20px;font-weight:700;color:var(--ink);letter-spacing:-.03em}
-.slab{font-size:12px;font-weight:600;color:var(--faint);padding:20px 12px 8px}
-.nav{display:flex;align-items:center;gap:14px;padding:11px 12px;border-radius:8px;
-  color:var(--body);font-size:15px;font-weight:500;cursor:pointer;margin-bottom:1px}
-.nav i{font-size:20px;color:var(--muted)}
-.nav:hover{background:var(--surface)}
-.nav.on{background:var(--blue-soft);color:var(--blue-dk);font-weight:600}
-.nav.on i{color:var(--blue)}
-.nav .n{margin-left:auto;font-size:12px;font-weight:600;background:var(--bad);color:#fff;
+.side{width:250px;flex-shrink:0;background:#1A1A1A;padding:24px 12px 22px;
+  display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.side::-webkit-scrollbar{width:0}
+.brand{display:flex;align-items:center;gap:11px;padding:0 12px 26px}
+.brand .t{font-size:21px;font-weight:600;color:#fff;letter-spacing:-.02em}
+.slab{font-size:12px;font-weight:500;color:#6E6E6E;padding:20px 14px 8px}
+.nav{display:flex;align-items:center;gap:14px;padding:13px 14px;border-radius:8px;
+  color:#fff;font-size:15px;font-weight:400;cursor:pointer;margin-bottom:2px;
+  border:1px solid transparent}
+.nav i{font-size:20px;color:#fff;opacity:.85}
+.nav:hover{background:#262626}
+/* Payoneer's active item: a lighter box with a thin outline. Not a fill. */
+.nav.on{background:#2B2B2B;border-color:#4A4A4A;font-weight:500}
+.nav .n{margin-left:auto;font-size:12px;font-weight:600;background:#E5342A;color:#fff;
   padding:1px 8px;border-radius:10px;font-variant-numeric:tabular-nums}
+.foot{margin-top:auto;padding:22px 14px 0;font-size:12px;color:#6E6E6E;line-height:1.9}
+.foot a{color:#6E6E6E;text-decoration:none;cursor:pointer}
+.foot a:hover{color:#fff}
 
-.main{padding:0 40px 60px;max-width:1220px}
+.main{flex:1;min-width:0;padding:26px 44px 70px;background:#fff;max-width:1400px}
+
+/* the utility cluster: floats top-right on white, no bar, no border */
+.util{display:flex;align-items:center;gap:6px;justify-content:flex-end;margin-bottom:14px}
+.util .ic{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;color:var(--ink);cursor:pointer;position:relative}
+.util .ic:hover{background:var(--surface)}
+.util .ic i{font-size:22px}
+.util .dot{position:absolute;top:1px;right:1px;min-width:18px;height:18px;padding:0 4px;
+  border-radius:9px;background:var(--bad);color:#fff;font-size:11px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums;
+  border:2px solid #fff}
+.util .sep{width:1px;height:22px;background:var(--line);margin:0 8px}
+.util .me{display:flex;align-items:center;gap:10px;cursor:pointer}
+.util .me .av{background:#3D4EA8;color:#fff;width:34px;height:34px;font-size:12px}
+.util .me span{font-size:15px;color:var(--ink);font-weight:400}
+
+/* the page title: large, in the content, left-aligned */
+.ptitle{font-size:34px;font-weight:500;color:var(--ink);letter-spacing:-.025em;
+  margin-bottom:28px}
 
 /* ---- the "Balances" pattern: a grey section label, a running total, cards ---- */
 .sec{margin-bottom:34px}
@@ -228,57 +235,56 @@ input[type=color]{padding:3px;height:44px}
   </div>
 </div>
 
-<div id="app">
-  <div class="scrim" id="scrim" onclick="menu(false)"></div>
+<div id="app"><div class="wrap">
 
-  <div class="draw" id="draw">
+  <div class="side">
     <div class="brand"><div class="mark">H</div><div class="t">Hispren</div></div>
-    <div class="slab">Church</div>
+
     <div class="nav on" data-v="home"       onclick="go('home')"><i class="ti ti-home"></i>Home</div>
     <div class="nav"    data-v="members"    onclick="go('members')"><i class="ti ti-users"></i>Members</div>
-    <div class="nav"    data-v="lists"      onclick="go('lists')"><i class="ti ti-list-check"></i>Lists</div>
     <div class="nav"    data-v="attendance" onclick="go('attendance')"><i class="ti ti-qrcode"></i>Attendance</div>
+    <div class="nav"    data-v="giving"     onclick="go('giving')"><i class="ti ti-coins"></i>Giving</div>
+    <div class="nav"    data-v="finance"    onclick="go('finance')"><i class="ti ti-report-money"></i>Finance</div>
+    <div class="nav"    data-v="messages"   onclick="go('messages')"><i class="ti ti-message-2"></i>Messages</div>
+
+    <div class="slab">Manage</div>
+    <div class="nav"    data-v="lists"      onclick="go('lists')"><i class="ti ti-list-check"></i>Lists</div>
     <div class="nav"    data-v="groups"     onclick="go('groups')"><i class="ti ti-sitemap"></i>Groups</div>
     <div class="nav"    data-v="families"   onclick="go('families')"><i class="ti ti-home-heart"></i>Families</div>
     <div class="nav"    data-v="calendar"   onclick="go('calendar')"><i class="ti ti-calendar"></i>Calendar</div>
-
-    <div class="slab">Money</div>
-    <div class="nav"    data-v="giving"     onclick="go('giving')"><i class="ti ti-coins"></i>Giving</div>
-    <div class="nav"    data-v="finance"    onclick="go('finance')"><i class="ti ti-report-money"></i>Finance</div>
-
-    <div class="slab">People work</div>
     <div class="nav"    data-v="followups"  onclick="go('followups')"><i class="ti ti-checkbox"></i>Follow-ups<span id="tBadge"></span></div>
     <div class="nav"    data-v="care"       onclick="go('care')"><i class="ti ti-heart-handshake"></i>Pastoral care</div>
-    <div class="nav"    data-v="messages"   onclick="go('messages')"><i class="ti ti-message-2"></i>Messages</div>
     <div class="nav"    data-v="reports"    onclick="go('reports')"><i class="ti ti-chart-line"></i>Reports</div>
-
-    <div class="slab">Data</div>
     <div class="nav"    data-v="duplicates" onclick="go('duplicates')"><i class="ti ti-copy"></i>Duplicates<span id="dBadge"></span></div>
     <div class="nav"    data-v="import"     onclick="go('import')"><i class="ti ti-file-import"></i>Import</div>
     <div class="nav"    data-v="export"     onclick="go('export')"><i class="ti ti-download"></i>Export</div>
     <div class="nav"    data-v="settings"   onclick="go('settings')"><i class="ti ti-settings"></i>Settings</div>
-    <div class="nav" style="margin-top:auto" onclick="logout()"><i class="ti ti-logout"></i>Sign out</div>
-  </div>
 
-  <div class="bar" id="bar">
-    <div class="burger" onclick="menu(true)"><i class="ti ti-menu-2"></i></div>
-    <h1 id="hTitle">Home</h1>
-    <div class="ic" title="Help"><i class="ti ti-help-circle"></i></div>
-    <div class="ic" id="bell" onclick="go('duplicates')" title="Needs attention">
-      <i class="ti ti-bell"></i></div>
-    <div class="sep"></div>
-    <div class="me" onclick="go('settings')">
-      <div class="av" id="pAv">—</div>
-      <span id="pName">—</span>
-      <i class="ti ti-chevron-down" style="font-size:16px;color:var(--muted)"></i>
+    <div class="foot">
+      <a onclick="logout()">Sign out</a><br>
+      Hispren Church OS<br>
+      Your data is yours. We never take a kobo of your giving.
     </div>
   </div>
 
   <div class="main">
+    <div class="util">
+      <div class="ic" title="Help"><i class="ti ti-help-circle"></i></div>
+      <div class="ic" id="bell" onclick="go('duplicates')" title="Needs attention">
+        <i class="ti ti-bell"></i></div>
+      <div class="sep"></div>
+      <div class="me" onclick="go('settings')">
+        <div class="av" id="pAv">—</div>
+        <span id="pName">—</span>
+        <i class="ti ti-chevron-down" style="font-size:17px;color:var(--muted)"></i>
+      </div>
+    </div>
+
+    <div class="ptitle" id="hTitle">Home</div>
     <div id="alerts"></div>
     <div id="view"></div>
   </div>
-</div>
+</div></div>
 <div id="modal"></div>
 
 <script>
@@ -378,15 +384,8 @@ function alertStrip(text, action, onclick, bad){
   </div>`;
 }
 
-function menu(open){
-  $('#draw').classList.toggle('on', open);
-  $('#scrim').classList.toggle('on', open);
-}
-addEventListener('scroll',()=>{
-  const b=$('#bar'); if(b) b.classList.toggle('stuck', scrollY>4);
-});
+
 function go(v){
-  menu(false);
   window._sub = window._acts = '';
   $('#alerts').innerHTML = '';
   document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('on',n.dataset.v===v));
@@ -442,7 +441,8 @@ function paintBell(){
 }
 
 /* ============================== HOME ============================== */
-function viewHome(){
+async function viewHome(){
+  const FUNDS_H = await api('/api/giving/funds').catch(()=>[]);
   const t     = MEMBERS.length;
   const call  = MEMBERS.filter(m=>['visitor','first_timer'].includes(m.stage_key));
   const noc   = MEMBERS.filter(m=>!m.phone&&!m.phone_2&&!m.email).length;
@@ -513,6 +513,29 @@ function viewHome(){
         <div class="muted" style="margin-top:14px;line-height:1.7">
           One attendance number hides which service is carrying the church.</div>
       </div>
+
+      ${FUNDS_H.length?`<div>
+        <div class="lab" style="color:var(--ink);font-size:19px;font-weight:600">Funds</div>
+        <div class="tot">Total held:
+          <b>NGN ${FUNDS_H.reduce((a,f)=>a+Number(f.balance||0),0).toLocaleString()}</b></div>
+        <div class="card">
+          ${FUNDS_H.filter(f=>Number(f.balance)>0).slice(0,4).map(f=>`
+            <div class="li" onclick="go('giving')" style="cursor:pointer">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:600;color:var(--ink)">${esc(f.name)}</div>
+                <div class="muted" style="color:${f.kind==='restricted'?'var(--bad-dk)':'var(--muted)'}">
+                  ${f.kind==='restricted'
+                    ? 'Restricted · ' + esc((f.allowed_categories||['specific purposes']).slice(0,2).join(', ')) + ' only'
+                    : 'General · spend on anything'}</div>
+              </div>
+              <div class="num" style="font-size:15px;color:var(--ink)">
+                NGN ${Number(f.balance).toLocaleString()}</div>
+            </div>`).join('')||'<div class="muted">Nothing counted yet.</div>'}
+        </div>
+        <div class="muted" style="margin-top:11px;line-height:1.7">
+          Hispren <b style="color:var(--ink)">refuses</b> any expense the givers did not agree to.
+          <span class="blue" onclick="go('finance')">Record one</span></div>
+      </div>`:''}
 
       <div class="card">
         <div class="ch"><i class="ti ti-mail"></i><h3>What it costs to reach them</h3></div>

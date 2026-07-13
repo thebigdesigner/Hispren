@@ -73,10 +73,13 @@ TYPE
   so a column of naira lines up under itself.
 
 SHELL
-  Top bar (sticky, white, borderless until you scroll):
-    hamburger + page title | help · bell (red count) · avatar + church name
-  Drawer nav slides from the left over a scrim. Active = pale blue pill.
-  Content: white, max-width 1220px, 40px gutters, generous air.
+  A permanent DARK sidebar (#1A1A1A, 250px). White logo mark + wordmark at top,
+  then nav. ACTIVE item = a lighter box (#2B2B2B) with a thin #4A4A4A OUTLINE —
+  not a fill, not a bar. Small grey footer text at the bottom.
+  Content: pure white. The utility cluster (help · bell · avatar + church name)
+  FLOATS top-right with no bar and no border behind it.
+  The page title is LARGE (34px, weight 500) and sits in the content, not in
+  chrome.
 
 THE BALANCES PATTERN — use it on every screen
   1. A grey section label ("Your church", "Funds", "Members")
