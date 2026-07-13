@@ -3,6 +3,7 @@ import { authenticate, requireRole, tenantTx } from "../platform/auth";
 import * as n from "./service";
 import { count, toGsm7, render } from "./gsm";
 import { provider } from "./providers";
+import { drainNow } from "../platform/inproc";
 import { emailProvider } from "./providers/email";
 
 export function registerNotifyRoutes(app: FastifyInstance) {
@@ -162,7 +163,11 @@ export function registerNotifyRoutes(app: FastifyInstance) {
   /** Send. Charges the wallet and hands the queue to the worker. */
   app.post<{ Params: { id: string } }>("/api/notify/send/:id", admin, async (req, reply) => {
     try {
-      return await tenantTx(req, (tx) => n.dispatch(tx, req.params.id));
+      const r = await tenantTx(req, (tx) => n.dispatch(tx, req.params.id));
+      // Drain right now. A pastor who presses Send should see it go, not wait
+      // fifteen seconds wondering whether anything happened.
+      const sent = await drainNow();
+      return { ...r, sent };
     } catch (e: any) {
       return reply.code(400).send({ error: "cannot_send", detail: e.message });
     }
@@ -284,6 +289,13 @@ export function registerNotifyRoutes(app: FastifyInstance) {
         };
       });
     });
+
+  /**
+   * Force the queue to drain. Should never be needed — but a message that sits
+   * in 'queued' forever is invisible, and invisible failures are the ones that
+   * lose a church.
+   */
+  app.post("/api/notify/drain", admin, async () => ({ sent: await drainNow() }));
 
   /** Inbound STOP webhook. Instant, final, and it writes a consent event. */
   app.post<{ Body: { from?: string; sender?: string; message?: string; sms?: string } }>(

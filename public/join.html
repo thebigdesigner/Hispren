@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join — Hispren</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#1A1A2E;--body:#4A4A5A;--muted:#8A8A9C;--line:#E2E2E8;
+  --blue:#1A5FD0;--blue-dk:#134BAA;--blue-soft:#E9F0FC;--orange:#FF4800;
+  --bad:#E5342A;--bad-soft:#FDEAE9;--bad-dk:#B0201A;--good:#00A868;--good-soft:#E4F7EF}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;background:#fff;color:var(--body);font-size:14px;
+  line-height:1.55;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.box{border:1px solid var(--line);border-radius:14px;padding:44px;width:100%;max-width:440px}
+.mark{width:42px;height:42px;border-radius:11px;background:var(--orange);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700}
+h1{font-size:26px;font-weight:600;color:var(--ink);letter-spacing:-.02em;margin:24px 0 6px}
+p{color:var(--body);line-height:1.7;margin-bottom:26px}
+label{display:block;font-size:13px;font-weight:500;color:var(--body);margin-bottom:7px}
+input{font-family:inherit;font-size:14px;padding:12px 13px;border:1px solid var(--line);
+  border-radius:8px;width:100%;color:var(--ink)}
+input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.f{margin-bottom:18px}
+.btn{background:var(--blue);color:#fff;font-family:inherit;font-size:14px;font-weight:600;
+  padding:13px;border:none;border-radius:22px;width:100%;cursor:pointer}
+.btn:hover{background:var(--blue-dk)}
+.err{background:var(--bad-soft);color:var(--bad-dk);padding:12px 15px;border-radius:8px;
+  font-size:13px;margin-bottom:18px;line-height:1.6}
+.ok{background:var(--good-soft);color:#00794B;padding:14px 16px;border-radius:8px;
+  font-size:14px;line-height:1.65}
+.tag{display:inline-block;background:var(--blue-soft);color:var(--blue-dk);font-size:12px;
+  font-weight:600;padding:4px 10px;border-radius:14px}
+.hint{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="box" id="box"><div class="mark">H</div><h1>Loading…</h1></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const token=new URLSearchParams(location.search).get('t');
+
+(async()=>{
+  if(!token){ bad('No invitation token in that link.'); return; }
+  const r=await fetch('/api/join/'+token);
+  const d=await r.json();
+  if(!r.ok){ bad(d.detail||'That invitation has expired.'); return; }
+  form(d);
+})();
+
+function bad(msg){
+  $('#box').innerHTML=`<div class="mark">H</div>
+    <h1>This link no longer works</h1>
+    <p>${esc(msg)}</p>
+    <div class="hint">Ask whoever invited you to send a new one. Links expire after seven
+      days, and they only work once.</div>`;
+}
+
+function form(d){
+  $('#box').innerHTML=`
+    <div class="mark">H</div>
+    <h1>Join ${esc(d.church)}</h1>
+    <p>You have been invited as <span class="tag">${esc(d.role_label)}</span><br><br>
+      <b style="color:var(--ink)">Set your own password.</b> Nobody at ${esc(d.church)} knows it,
+      and nobody should — everything you do here is recorded with your name on it.</p>
+    <div id="err"></div>
+    <div class="f"><label>Email</label>
+      <input value="${esc(d.email)}" disabled style="background:#F7F7FA;color:var(--muted)"></div>
+    <div class="f"><label>Your name</label>
+      <input id="name" value="${esc(d.full_name||'')}" placeholder="Sis. Ngozi Eze"></div>
+    <div class="f"><label>Choose a password</label>
+      <input id="pw" type="password" autocomplete="new-password">
+      <div class="hint">At least 10 characters. Not the church's name, not only numbers.
+        This login opens a congregation's records.</div></div>
+    <div class="f"><label>Type it again</label>
+      <input id="pw2" type="password" autocomplete="new-password"></div>
+    <button class="btn" onclick="join('${esc(d.subdomain)}')">Set my password and join</button>`;
+  setTimeout(()=>$('#name').focus(),50);
+}
+
+async function join(sub){
+  const name=$('#name').value.trim(), pw=$('#pw').value, pw2=$('#pw2').value;
+  if(!name){ $('#err').innerHTML='<div class="err">Your name.</div>'; return; }
+  if(pw!==pw2){ $('#err').innerHTML='<div class="err">The two passwords do not match.</div>'; return; }
+  const r=await fetch('/api/join',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({token,full_name:name,password:pw})});
+  const d=await r.json();
+  if(!r.ok){ $('#err').innerHTML=`<div class="err">${esc(d.detail||'Could not join.')}</div>`; return; }
+  $('#box').innerHTML=`<div class="mark">H</div>
+    <h1>You are in</h1>
+    <div class="ok">Your account at <b>${esc(d.church)}</b> is ready.<br><br>
+      Sign in with <b>${esc(d.email)}</b> and the password you just chose.</div>
+    <a href="/" style="text-decoration:none"><button class="btn" style="margin-top:24px">
+      Sign in</button></a>`;
+}
+</script>
+</body>
+</html>

@@ -12,6 +12,36 @@
  */
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { hash as argonHash, verify as argonVerify } from "@node-rs/argon2";
+
+const LOCK_AFTER = 5;              // wrong guesses
+const LOCK_FOR   = 15;             // minutes
+
+/**
+ * Password policy.
+ *
+ * Not theatre. The prize behind this login is a congregation's phone numbers,
+ * home addresses, giving records, and — where a church has enabled it — their
+ * genotypes. Ten characters is the floor, and "dominion2026" is not a password
+ * for a church called Dominion.
+ */
+export function checkPassword(pw: string, context: string[] = []): string | null {
+  if (!pw || pw.length < 10)
+    return "At least 10 characters. This login opens a congregation's records.";
+  if (/^[0-9]+$/.test(pw))
+    return "Not only numbers.";
+  const low = pw.toLowerCase();
+  for (const c of context) {
+    if (c && c.length > 3 && low.includes(c.toLowerCase()))
+      return `It must not contain "${c}".`;
+  }
+  const common = ["password","12345678","qwerty","letmein","welcome",
+                  "church","pastor","jesus","god","amen","hispren"];
+  if (common.some(c => low.includes(c)))
+    return "Too easy to guess. Pick something that is not about the church.";
+  return null;
+}
+
+export async function hashPassword(pw: string) { return argonHash(pw); }
 import { FastifyRequest, FastifyReply } from "fastify";
 import { platformQuery, withTenant } from "./db";
 import { requireTenant } from "./tenant";
@@ -26,30 +56,76 @@ function hashToken(raw: string): string {
   return createHash("sha256").update(raw).digest("hex");
 }
 
+export type LoginResult =
+  | { ok: true; token: string; role: string }
+  | { ok: false; reason: "bad_credentials" }
+  | { ok: false; reason: "locked"; minutes: number };
+
 export async function login(
   tenantId: string,
   email: string,
-  password: string
-): Promise<{ token: string; role: string } | null> {
+  password: string,
+  ip?: string
+): Promise<LoginResult> {
   // Users are global; membership binds them to a tenant. Both checks required.
   const u = await platformQuery<{
     id: string; password_hash: string | null;
-  }>(`SELECT id, password_hash FROM app_users WHERE email = $1`, [email]);
+    failed_attempts: number; locked_until: string | null;
+  }>(`SELECT id, password_hash, failed_attempts, locked_until
+        FROM app_users WHERE email = $1`, [email]);
   const user = u.rows[0];
-  // Constant-ish time: always run argon2 even for unknown users.
+
+  // ---- LOCKED OUT --------------------------------------------------------
+  // Held in the DATABASE, not in memory. An in-memory counter resets on every
+  // deploy and does not exist across instances — an attacker only has to wait
+  // for a restart.
+  if (user?.locked_until && new Date(user.locked_until) > new Date()) {
+    const mins = Math.ceil(
+      (new Date(user.locked_until).getTime() - Date.now()) / 60000);
+    return { ok: false, reason: "locked", minutes: mins };
+  }
+
+  // Constant-ish time: always run argon2, even for an unknown user, so the
+  // response time does not reveal whether the email exists.
   const ok = await argonVerify(
     user?.password_hash ??
       "$argon2id$v=19$m=65536,t=3,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     password
   ).catch(() => false);
-  if (!user || !ok) return null;
+
+  if (!user || !ok) {
+    if (user) {
+      // Five wrong guesses locks the account for fifteen minutes. The prize
+      // behind this login is a congregation's phone numbers, addresses, giving
+      // records, and — where enabled — their genotypes.
+      const n = (user.failed_attempts ?? 0) + 1;
+      await platformQuery(
+        `UPDATE app_users
+            SET failed_attempts = $2,
+                locked_until = CASE WHEN $2 >= $3
+                                    THEN now() + ($4 || ' minutes')::interval
+                                    ELSE locked_until END
+          WHERE id = $1`,
+        [user.id, n, LOCK_AFTER, String(LOCK_FOR)]);
+    }
+    return { ok: false, reason: "bad_credentials" };
+  }
+
+  // clean slate on a good password
+  await platformQuery(
+    `UPDATE app_users SET failed_attempts = 0, locked_until = NULL,
+            last_login_at = now(), last_login_ip = $2
+      WHERE id = $1`, [user.id, ip ?? null]);
 
   const m = await platformQuery<{ role: string }>(
-    `SELECT role FROM tenant_memberships WHERE tenant_id = $1 AND user_id = $2`,
+    `SELECT role FROM tenant_memberships
+      WHERE tenant_id = $1 AND user_id = $2 AND revoked_at IS NULL`,
     [tenantId, user.id]
   );
   const role = m.rows[0]?.role;
-  if (!role) return null; // valid human, wrong church → no session
+  // A valid human at the wrong church gets nothing — and is told nothing more
+  // than a wrong password would tell them.
+  if (!role) return { ok: false, reason: "bad_credentials" };
 
   const raw = randomBytes(32).toString("base64url");
   await platformQuery(
@@ -57,7 +133,7 @@ export async function login(
      VALUES ($1, $2, $3, now() + ($4 || ' days')::interval)`,
     [hashToken(raw), user.id, tenantId, SESSION_TTL_DAYS]
   );
-  return { token: raw, role };
+  return { ok: true, token: raw, role };
 }
 
 export async function logout(rawToken: string): Promise<void> {

@@ -41,10 +41,6 @@ export function registerCareRoutes(app: FastifyInstance) {
 
   // ---- households ---------------------------------------------------------
 
-  // ---- the users a task can be assigned to --------------------------------
-  app.get("/api/users", auth, async (req) =>
-    tenantTx(req, async (tx) => (await tx.query(
-      `SELECT u.id, u.full_name, u.email, m.role
-         FROM tenant_memberships m JOIN app_users u ON u.id = m.user_id
-        WHERE m.tenant_id = current_tenant_id() ORDER BY u.full_name`)).rows));
+  // The list of people a task can be assigned to now lives at GET /api/users,
+  // in the users module — which also carries roles, invites, and lockout state.
 }

@@ -1,87 +1,145 @@
-# Hispren — deploy
+# Hispren — the full pack
 
-## 1. Neon SQL Editor (browser), in this order
+---
+
+## 1. Neon SQL Editor (browser), in this exact order
 
 | # | File | |
 |---|---|---|
 | 1 | `001_foundation.sql` | object model + RLS |
 | 2 | `002_platform.sql` | sessions, outbox, files, billing |
-| 3 | `03_create_roles.sql` | **edit both passwords first** |
-| 4 | `04_verify_isolation.sql` | **must be ALL GREEN. Do not proceed otherwise.** |
+| 3 | `03_create_roles.sql` | **edit BOTH passwords first** |
+| 4 | `04_verify_isolation.sql` | **13 checks. Must be ALL GREEN. Do not proceed otherwise.** |
 | 5 | `003_nigerian_fields.sql` | three-part names, two SIMs, state of origin, genotype |
 | 6 | `004_import_dedupe.sql` | bulk import + duplicate detection |
 | 7 | `005_attendance.sql` | services, sessions, offline scans |
 | 8 | `006_groups_events_reports.sql` | recursive groups, calendar, reports |
-| 9 | `007_notifications.sql` | messages, templates, suppression, DND cache |
-| 10 | `05_seed_church.sql` | Dominion Chapel + login |
-| 11 | `008_optout_email.sql` | mandatory opt-out line + email templates |
-| 12 | `08_go_live.sql` | SMS credit, templates, services |
+| 9 | `007_notifications.sql` | messages, suppression layer, DND cache |
+| 10 | `008_optout_email.sql` | the NCC-mandated opt-out line, email templates |
+| 11 | `009_giving.sql` | funds, counting sessions, **the restricted-fund guard** |
+| 12 | `010_users.sql` | **users, roles, invitations, account lockout** |
+| 13 | `05_seed_church.sql` | Dominion Chapel + the first login |
+| 14 | `08_go_live.sql` | SMS credit, templates, services, funds |
 
-*(Already run some? They're idempotent. Re-running is safe.)*
+Every one is idempotent. Re-running what you have already run is safe.
 
-Login: **dominion** / `pastor@dominion.test` / `DominionPastor2026`
+    Church:   dominion
+    Login:    pastor@dominion.test
+    Password: DominionPastor2026
+
+---
 
 ## 2. Push
 
     npm install
-    npm run check      # typecheck + frontend syntax + handler resolution
+    npm run check      # types + route collisions + frontend syntax + handlers
     git add . ; git commit -m "..." ; git push
 
-## 3. Railway
+**Run `npm run check` before every push.** Half a second. It is the difference
+between finding a boot crash in your terminal and finding it in a Railway log
+after the site is already down. Every one of its four gates exists because
+something actually broke.
 
-Variables:
+---
+
+## 3. Railway → Variables
 
     DATABASE_URL          postgresql://hispren_app:...@ep-...-pooler.../neondb?sslmode=require
     PLATFORM_DATABASE_URL postgresql://hispren_platform:...@ep-...-pooler.../neondb?sslmode=require
     BASE_DOMAIN           hispren.up.railway.app
 
-**Never `MIGRATION_DATABASE_URL`.** That's the owner role, and RLS does not apply
-to table owners. If the running app holds it, every isolation policy is bypassed.
+**NEVER `MIGRATION_DATABASE_URL`.** That is the owner role, and RLS does not
+apply to table owners. If the running app ever holds it, every isolation policy
+in this product is silently bypassed.
 
 Optional:
 
-    REDIS_URL         worker only (reminders + the send queue)
-    TERMII_API_KEY    live SMS.   Without it: dry run.
-    RESEND_API_KEY    live email. Without it: dry run.
-    EMAIL_FROM        e.g. "Dominion Chapel <hello@yourdomain.com>"
-
-**Get RESEND_API_KEY first.** Free tier, no telco paperwork, no DND register,
-no 160-character tax. A 1,832-member church sending one weekly reminder pays
-**NGN 8,244 by SMS or NGN 2,826 by cascade** — NGN 281,736 a year, saved, for
-the same message. Email is not a nice-to-have. It is how a Nigerian church can
-afford to communicate at all.
+    RESEND_API_KEY   live email.  Without it: dry run.   <-- GET THIS FIRST
+    EMAIL_FROM       Dominion Chapel <hello@yourdomain.com>
+    TERMII_API_KEY   live SMS.    Without it: dry run.
+    PUBLIC_URL       used in invitation links
+    REDIS_URL        optional. Without it the queue runs IN the API process,
+                     which is correct below ~10 churches.
 
 ---
 
-## What's built
+## What is built
 
 | Screen | |
 |---|---|
-| Overview | KPIs, who needs a call, data health, groups |
-| Members | search, register, edit, archive, QR, genotype (pastor-only, audited) |
-| Attendance | offline QR scanner + manual mark sheet + unregistered headcount |
-| Groups | recursive hierarchy, leaders, membership, roll-up counts |
+| Home | Payoneer-style: alert strip, balances, who needs you, funds |
+| Members | register · search · edit · archive · QR · history · genotype (pastor-only, every read logged) |
+| Lists | **smart** (questions answered live) + **saved** (hand-picked). Both messageable. |
+| Attendance | offline QR scanner · manual mark sheet · newcomer at the door · unregistered headcount |
+| Groups | recursive hierarchy · leaders · roll-up counts |
+| Families | households, roles, message a whole family |
 | Calendar | recurring services AND one-off events |
-| Reports | trend, funnel, at-risk, growth |
-| Messages | GSM-7 counter, full suppression layer, campaigns, message log |
-| Tasks & Care | owned follow-ups, prayer/counselling/hospital queue |
-| Duplicates | review and merge, never automatic |
-| Import | CSV with column guessing, preview, revert |
+| **Giving** | counting sessions · anonymous cash · named envelopes · pledges |
+| **Finance** | funds · expenses · approval · income statement · **the restricted-fund guard** |
+| Messages | GSM-7 counter · channel cascade · full suppression layer · message log |
+| Follow-ups | owned tasks |
+| Pastoral care | prayer, counselling, hospital |
+| Reports | trend · funnel · at-risk · growth |
+| Duplicates | review and merge. Never automatic. |
+| Import | CSV, column guessing, preview, **undo** |
 | Export | CSV, Excel-safe, every download audited |
-| Settings | church, brand, health toggle, custom fields |
+| **Who can log in** | **users · roles · invitations · lockout** |
+| Settings | church · brand · health toggle · custom fields |
 
-Scanner: `/scan.html` — works with no internet.
+Scanner: `/scan.html` — works with **no internet at all**.
+Join page: `/join.html` — an invited person sets their own password.
 
-## Known gaps
+---
 
-- **SMS is in dry-run.** Live sending needs a sender ID from Termii: CAC
-  certificate + a stamped letter per operator. See `sender-id-letter.md`.
-- **The DND route may not be obtainable.** The NCC restricts DND-capable
-  ("Corporate Bind") sender IDs to banks. Without it, DND-registered numbers
-  cannot be reached by SMS at all — and Hispren will tell you so rather than
-  pretend. WhatsApp may have to become the primary channel.
-- **The mandatory opt-out line is not in the templates.** The NCC requires
-  "Reply STOP to opt out" at the end of every commercial SMS. Sending without it
-  is how a sender ID gets blocked.
-- **Phase 2 (automation engine) not started.** Every module already emits events
-  into the outbox. Nothing is listening yet.
+## The five things no competitor does
+
+**Tenant isolation enforced by the database, not by code.** A forgotten `WHERE`
+returns zero rows, not everyone's rows. Verified thirteen ways, on Neon, from
+Node, through the pooler, with thirty interleaved queries proving no context
+bleed between churches on a shared connection.
+
+**The restricted-fund guard.** Money given for the building CANNOT be spent on
+salaries — and CANNOT take the fund into deficit. Two separate refusals, both at
+the database. Planning Center allows it. ChurchTrac allows it. A spreadsheet
+certainly allows it. This is where a treasurer's trouble begins, and Hispren
+simply will not commit the transaction.
+
+**An attendance scanner that works with no signal.** 3,000 people in 30 minutes
+is 1.7 scans a second. A round-trip per scan backs the gate up and the church is
+back on paper by week three. The roster is cached on the phone; a scan is a local
+lookup; the queue syncs when the signal returns. Double-scans are absorbed
+silently. First scan wins, because that is when they arrived.
+
+**The suppression layer sits at the SEND boundary.** A church admin cannot even
+*build* a message that reaches someone who opted out, or died, or has already had
+four texts this week. And a suppressed message is never a silent no-op — it is a
+row, with a reason. When a pastor says "she never got it", the answer is one
+query away.
+
+**Email first, SMS as the fallback.** One message to 1,832 members: **NGN 8,244**
+by SMS, **NGN 2,826** by cascade. NGN 281,736 a year on one weekly reminder.
+Email has no DND register, no 160-character tax, no 8pm cutoff. It is how a
+Nigerian church can afford to communicate at all.
+
+---
+
+## What is NOT built
+
+- **Phase 2 — the automation engine.** Every module already emits events into
+  `event_outbox`. Nothing listens yet. This is the difference between a filing
+  cabinet and an assistant.
+- **Child check-in.** Breeze's second-biggest selling point. Safety-critical.
+- **Volunteer rotas.** Who is on duty Sunday.
+- **Member self-service.** Cuts admin work AND keeps the data fresh.
+- **Two-way messaging.** The STOP webhook exists; Termii has never been told the
+  URL, so a reply goes nowhere.
+- **Photos.** The column exists; there is no upload.
+
+## What is blocked on paperwork, not code
+
+- **Live SMS.** Needs a sender ID: CAC certificate plus a stamped letter to each
+  of MTN, Airtel, Glo, 9mobile. See `sender-id-letter.md`.
+- **The DND route.** The NCC restricts DND-capable ("Corporate Bind") sender IDs
+  to banks. Without it, DND-registered numbers cannot be reached by SMS **at
+  all** — and Hispren will tell you so, rather than pretend the message went.
+  **Ask Termii the blunt question before you chase letters for three weeks.**

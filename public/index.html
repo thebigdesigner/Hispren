@@ -258,6 +258,7 @@ input[type=color]{padding:3px;height:44px}
     <div class="nav"    data-v="duplicates" onclick="go('duplicates')"><i class="ti ti-copy"></i>Duplicates<span id="dBadge"></span></div>
     <div class="nav"    data-v="import"     onclick="go('import')"><i class="ti ti-file-import"></i>Import</div>
     <div class="nav"    data-v="export"     onclick="go('export')"><i class="ti ti-download"></i>Export</div>
+    <div class="nav"    data-v="users"      onclick="go('users')"><i class="ti ti-user-shield"></i>Who can log in</div>
     <div class="nav"    data-v="settings"   onclick="go('settings')"><i class="ti ti-settings"></i>Settings</div>
 
     <div class="foot">
@@ -325,7 +326,7 @@ async function boot(){
     api('/api/groups').catch(()=>[]),
     api('/api/states').catch(()=>[]),
     api('/api/church/fields').catch(()=>[]),
-    api('/api/users').catch(()=>[]),
+    api('/api/users').then(r=>r.users||[]).catch(()=>[]),
     api('/api/tasks').catch(()=>[])]);
   const od=TASKS.filter(t=>t.overdue).length;
   $('#tBadge').outerHTML = od
@@ -397,7 +398,7 @@ function go(v){
     followups:viewTasks, care:viewCare,
     messages:viewMessages, reports:viewReports,
     giving:viewGiving, finance:viewFinance, duplicates:viewDupes,
-    import:viewImport, export:viewExport, settings:viewSettings,
+    import:viewImport, export:viewExport, users:viewUsers, settings:viewSettings,
   };
   const f = R[v];
   if (!f) { console.error('no view for', v); return; }
@@ -2095,9 +2096,20 @@ async function viewMessages(){
     api('/api/notify/templates').catch(()=>[])]);
   window._T = tmpls;
 
+  const stuck = camps.reduce((a,c)=>a+(c.status==='queued'?Number(c.queued||0):0),0);
   head('Messages', st.live ? `Live via ${st.provider}` : 'Dry run — nothing is actually sent',
     `<button class="btn btn-o" onclick="testSend()">Send a test</button>
      <button class="btn" onclick="messageAll()">Compose</button>`);
+
+  // A message stuck in 'queued' is the worst failure there is: the pastor
+  // believes it went, the member never got it, and nothing logged an error.
+  // If anything is stuck, SAY SO, loudly, at the top.
+  if (stuck) {
+    $('#alerts').innerHTML = alertStrip(
+      `<b>${stuck} message${stuck===1?'':'s'} stuck in the queue.</b> `
+      + `They were accepted but never sent. The sender is not running.`,
+      'RETRY NOW', 'retryQueue()', true);
+  }
 
   $('#view').innerHTML=`
    ${!st.live ? `<div class="card" style="margin-bottom:16px;border-left:3px solid var(--warn)">
@@ -2209,6 +2221,16 @@ async function viewMessages(){
      </tr>`).join('')}</tbody></table>`
      :'<div class="muted">Nothing sent yet.</div>'}
    </div>`;
+}
+
+/** Force the queue to drain. It should never be needed — but when it is, it is
+ *  the difference between a church discovering a silent failure and never
+ *  discovering it. */
+async function retryQueue(){
+  const r = await api('/api/notify/drain',{method:'POST'});
+  $('#alerts').innerHTML = '';
+  alert(r.sent ? `Sent ${r.sent}.` : 'Nothing to send.');
+  go('messages');
 }
 
 async function addSender(){
@@ -3508,6 +3530,200 @@ async function approve(id,ok){
   try{ await api(`/api/giving/expenses/${id}/approve`,{method:'POST',
     body:JSON.stringify({approve:ok})}); go('finance'); }
   catch(e){ alert(e.message) }
+}
+
+
+/* ============================ WHO CAN LOG IN ========================== */
+async function viewUsers(){
+  const d = await api('/api/users').then(r=>r.users?r:{users:r,invites:[],roles:{}});
+  const U = d.users||[], INV = d.invites||[], R = d.roles||{};
+  window._R = R;
+  const canManage = ['owner','admin'].includes(d.my_role);
+  const isOwner   = d.my_role === 'owner';
+
+  head('Who can log in', `${U.length} ${U.length===1?'person':'people'}`,
+    canManage?`<button class="btn" onclick="inviteUser()">Invite someone</button>`:'');
+
+  $('#view').innerHTML=`
+   <div class="card" style="margin-bottom:22px">
+     <div class="muted" style="line-height:1.85">
+       A church is a <b style="color:var(--ink)">secretary</b>, a
+       <b style="color:var(--ink)">treasurer</b>, <b style="color:var(--ink)">ushers</b>,
+       <b style="color:var(--ink)">cell leaders</b> and a <b style="color:var(--ink)">pastor</b>.
+       Give each of them their own account.<br><br>
+       The separation that matters: <b style="color:var(--ink)">staff record the money,
+       admins approve it.</b> One person doing both is how a church loses money it never
+       knew it had. And a genotype read that is "audited" to the only account in the
+       building is not audited at all.<br><br>
+       <b style="color:var(--ink)">You never set anybody else's password.</b> They get a link,
+       they choose their own, and the link dies when they use it.
+     </div>
+   </div>
+
+   <div class="card" style="margin-bottom:22px">
+     <div class="ch"><i class="ti ti-users"></i><h3>Accounts</h3><span class="r">${U.length}</span></div>
+     <table><thead><tr>
+       <th>Person</th><th>Role</th><th>Last signed in</th><th></th>
+     </tr></thead><tbody>
+     ${U.map(u=>`<tr style="cursor:default">
+       <td><div style="display:flex;align-items:center;gap:12px">
+         <div class="av">${ini(u.full_name||u.email)}</div>
+         <div><div style="font-weight:600;color:var(--ink)">${esc(u.full_name||'—')}
+           ${u.user_id===d.me?'<span class="tag t-b" style="margin-left:6px">you</span>':''}</div>
+           <div class="muted">${esc(u.email)}</div></div>
+       </div></td>
+       <td>${isOwner && u.user_id!==d.me
+         ? `<select onchange="setRole('${u.user_id}',this.value)" style="max-width:150px">
+              ${Object.entries(R).map(([k,v])=>
+                `<option value="${k}" ${k===u.role?'selected':''}>${esc(v.label)}</option>`).join('')}
+            </select>`
+         : `<span class="tag ${u.role==='owner'?'t-b':'t-n'}">${esc((R[u.role]||{}).label||u.role)}</span>`}</td>
+       <td class="muted">${u.last_login_at
+         ? new Date(u.last_login_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})
+         : 'never'}</td>
+       <td style="text-align:right;white-space:nowrap">
+         ${u.locked?`<button class="btn btn-o" style="padding:6px 12px;font-size:13px"
+           onclick="unlockUser('${u.user_id}')">Unlock</button>`:''}
+         ${isOwner && u.user_id!==d.me
+           ? `<i class="ti ti-x" title="Remove" style="color:var(--faint);cursor:pointer;font-size:19px"
+                onclick="removeUser('${u.user_id}','${esc(u.full_name||u.email)}')"></i>`:''}
+       </td>
+     </tr>`).join('')}
+     </tbody></table>
+   </div>
+
+   ${INV.length?`<div class="card" style="margin-bottom:22px">
+     <div class="ch"><i class="ti ti-mail-forward"></i><h3>Invited, not yet joined</h3>
+       <span class="r">${INV.length}</span></div>
+     ${INV.map(i=>`<div class="li">
+       <div class="g" style="background:var(--warn)"><i class="ti ti-clock"></i></div>
+       <div style="flex:1;min-width:0">
+         <div style="font-weight:600;color:var(--ink)">${esc(i.full_name||i.email)}</div>
+         <div class="muted">${esc(i.email)} · ${esc((R[i.role]||{}).label||i.role)} ·
+           expires ${new Date(i.expires_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div>
+       </div>
+       <i class="ti ti-x" style="color:var(--faint);cursor:pointer;font-size:19px"
+          onclick="cancelInvite('${i.id}')"></i>
+     </div>`).join('')}
+   </div>`:''}
+
+   <div class="card">
+     <div class="ch"><i class="ti ti-shield-lock"></i><h3>What each role can do</h3></div>
+     ${Object.entries(R).map(([k,v])=>`<div class="li">
+       <div class="g" style="background:${
+         k==='owner'?'#3D4EA8':k==='admin'?'var(--blue)':k==='pastor'?'var(--good)':
+         k==='staff'?'var(--warn)':'var(--faint)'}">
+         <i class="ti ti-${k==='owner'?'crown':k==='admin'?'settings':k==='pastor'?'cross':
+           k==='staff'?'user-check':'eye'}"></i></div>
+       <div style="flex:1;min-width:0">
+         <div style="font-weight:600;color:var(--ink)">${esc(v.label)}</div>
+         <div class="muted" style="line-height:1.7">${esc(v.can)}</div></div>
+     </div>`).join('')}
+   </div>
+
+   <div class="card" style="margin-top:22px">
+     <div class="ch"><i class="ti ti-key"></i><h3>Change your own password</h3></div>
+     <div id="pwerr"></div>
+     <div class="gg2">
+       <div class="field"><label>Current password</label>
+         <input id="p_cur" type="password" autocomplete="current-password"></div>
+       <div class="field"><label>New password</label>
+         <input id="p_new" type="password" autocomplete="new-password"></div>
+     </div>
+     <div class="muted" style="margin-bottom:16px;line-height:1.7">
+       At least 10 characters, not the church's name, not only numbers.
+       <b style="color:var(--ink)">Every other session you have open will end.</b>
+       If somebody had your old password, they are out.</div>
+     <button class="btn" onclick="changePw()">Change it</button>
+   </div>`;
+}
+
+function inviteUser(){
+  const R = window._R || {};
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal"
+      style="max-width:520px">
+    <div class="h" style="font-size:22px;font-weight:600">Invite someone</div>
+    <div class="muted" style="margin-bottom:24px;line-height:1.8">
+      They will get an email with a link. <b style="color:var(--ink)">They choose their own
+      password</b> — you will never know it, and you should not.
+      The link works once and expires in seven days.</div>
+    <div id="ierr"></div>
+    <div class="gg2">
+      <div class="field"><label>Their name</label>
+        <input id="i_name" placeholder="Sis. Ngozi Eze"></div>
+      <div class="field"><label>Their email</label>
+        <input id="i_email" type="email" placeholder="ngozi@example.com"></div>
+    </div>
+    <div class="field"><label>What can they do</label>
+      <select id="i_role" onchange="roleNote()">
+        ${Object.entries(R).map(([k,v])=>
+          `<option value="${k}" ${k==='staff'?'selected':''}>${esc(v.label)}</option>`).join('')}
+      </select>
+      <div class="muted" style="margin-top:9px;line-height:1.75" id="i_note"></div>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:24px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
+      <button class="btn" style="flex:2" onclick="sendInvite()">Send the invitation</button>
+    </div>
+  </div></div>`;
+  roleNote();
+}
+function roleNote(){
+  const R = window._R || {};
+  const k = $('#i_role').value;
+  $('#i_note').innerHTML = (R[k]||{}).can || '';
+}
+async function sendInvite(){
+  const email=$('#i_email').value.trim();
+  if(!email){$('#ierr').innerHTML='<div class="err">Their email.</div>';return}
+  try{
+    const r=await api('/api/users/invite',{method:'POST',body:JSON.stringify({
+      email, full_name:$('#i_name').value.trim()||null, role:$('#i_role').value })});
+    $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal"
+        style="max-width:520px">
+      <div class="h" style="font-size:22px;font-weight:600">Invitation sent</div>
+      <div class="muted" style="margin:10px 0 22px;line-height:1.8">
+        ${r.emailed
+          ? `An email is on its way to <b style="color:var(--ink)">${esc(r.email)}</b>.`
+          : `Email is in <b style="color:var(--ink)">dry run</b>, so nothing was actually sent.
+             Give them this link yourself:`}
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:8px;
+           padding:14px;font-size:13px;word-break:break-all;font-family:ui-monospace,monospace;
+           color:var(--ink)">${esc(r.link)}</div>
+      <div class="muted" style="margin-top:12px;line-height:1.7">
+        It works once and expires in seven days.</div>
+      <button class="btn" style="width:100%;margin-top:24px"
+        onclick="close_();go('users')">Done</button>
+    </div></div>`;
+  }catch(e){ $('#ierr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
+}
+async function cancelInvite(id){
+  await api('/api/users/invite/'+id,{method:'DELETE'});
+  go('users');
+}
+async function setRole(id,role){
+  try{ await api(`/api/users/${id}/role`,{method:'PATCH',body:JSON.stringify({role})}); go('users'); }
+  catch(e){ alert(e.message); go('users'); }
+}
+async function unlockUser(id){
+  await api(`/api/users/${id}/unlock`,{method:'POST'});
+  go('users');
+}
+async function removeUser(id,name){
+  if(!confirm(`Remove ${name}?\n\nThey are signed out immediately and cannot sign back in. `
+    +`Everything they did stays on the record, with their name on it.`))return;
+  try{ await api('/api/users/'+id,{method:'DELETE'}); go('users'); }
+  catch(e){ alert(e.message) }
+}
+async function changePw(){
+  const cur=$('#p_cur').value, next=$('#p_new').value;
+  if(!cur||!next){$('#pwerr').innerHTML='<div class="err">Both fields.</div>';return}
+  try{
+    await api('/api/users/password',{method:'POST',body:JSON.stringify({current:cur,next})});
+    alert('Changed. You will need to sign in again everywhere.');
+    logout();
+  }catch(e){ $('#pwerr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
 }
 
 (async()=>{
