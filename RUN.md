@@ -18,6 +18,7 @@
 | 10 | `008_optout_email.sql` | the NCC-mandated opt-out line, email templates |
 | 11 | `009_giving.sql` | funds, counting sessions, **the restricted-fund guard** |
 | 12 | `010_users.sql` | **users, roles, invitations, account lockout** |
+| 12b | `011_whatsapp.sql` | **WhatsApp — the way around bulk SMS** |
 | 13 | `05_seed_church.sql` | Dominion Chapel + the first login |
 | 14 | `08_go_live.sql` | SMS credit, templates, services, funds |
 
@@ -54,9 +55,14 @@ in this product is silently bypassed.
 
 Optional:
 
-    RESEND_API_KEY   live email.  Without it: dry run.   <-- GET THIS FIRST
-    EMAIL_FROM       Dominion Chapel <hello@yourdomain.com>
-    TERMII_API_KEY   live SMS.    Without it: dry run.
+    RESEND_API_KEY     live email.  Without it: dry run.   <-- GET THIS FIRST
+    EMAIL_FROM         Dominion Chapel <hello@yourdomain.com>
+
+    WHATSAPP_TOKEN     Meta Cloud API. Real bulk WhatsApp. NO TELCO INVOLVED.
+    WHATSAPP_PHONE_ID  Set neither and WhatsApp still works — by hand, for free,
+                       one tap per person, from the church's own number.
+
+    TERMII_API_KEY     live SMS. Blocked on a sender ID + the DND route.
     PUBLIC_URL       used in invitation links
     REDIS_URL        optional. Without it the queue runs IN the API process,
                      which is correct below ~10 churches.
@@ -134,6 +140,37 @@ Nigerian church can afford to communicate at all.
 - **Two-way messaging.** The STOP webhook exists; Termii has never been told the
   URL, so a reply goes nowhere.
 - **Photos.** The column exists; there is no upload.
+
+## You do NOT need bulk SMS
+
+| | Setup | Cost | Blocked by |
+|---|---|---|---|
+| **Email** | none | **free, unlimited** | nothing |
+| **WhatsApp, by hand** | **none** | **free** | nothing |
+| WhatsApp Cloud API | Meta business account, ~2 days | cheap | **no telco at all** |
+| Bulk SMS | CAC + 4 stamped letters | NGN 4.50/page | sender ID + DND route |
+
+**WhatsApp needs no telco, no sender ID, no DND register, and no NCC approval.**
+Meta does not care that you are not a bank. And Nigerians LIVE on WhatsApp — a
+message from the church arrives beside their family, not in the SMS folder they
+stopped opening in 2019.
+
+**And it works today, with nothing set up.** Compose, pick WhatsApp, and Hispren
+hands the secretary a tap-through list: she taps a name, WhatsApp opens with the
+message already written, she presses send. It goes from **the church's own
+number**. For the thirty-four first-timers who need reaching this Sunday, that is
+not a workaround — it is better than a bulk SMS, because it arrives as a real
+message from a real person.
+
+For a whole congregation: **WhatsApp broadcast lists**. 256 people each, a native
+feature of the phone in her hand, costs nothing, and every recipient sees a
+PRIVATE message rather than a group. Hispren exports the numbers ready to paste.
+
+    One message to 1,832 members:
+      SMS to everyone          NGN 8,244   BLOCKED - no sender ID
+      Email + WhatsApp         NGN     0   works TODAY
+
+    Every Sunday, for a year:  NGN 428,688 saved.
 
 ## What is blocked on paperwork, not code
 

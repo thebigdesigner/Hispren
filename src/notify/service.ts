@@ -17,6 +17,7 @@ import { publish } from "../platform/outbox";
 import { count, render, toGsm7 } from "./gsm";
 import { provider } from "./providers";
 import { emailProvider, renderEmail } from "./providers/email";
+import { waProvider, waLink, whatsappProvider } from "./providers/whatsapp";
 
 const QUIET_START = 21;   // 21:00 WAT
 const QUIET_END = 7;      // 07:00 WAT
@@ -46,7 +47,20 @@ export type Candidate = {
  * members — and it costs the church nothing to adopt, because the member gets
  * the message either way.
  */
-export type Channel = "sms" | "email" | "cascade";
+export type Channel = "sms" | "email" | "whatsapp" | "cascade";
+
+/**
+ * THE CASCADE, and the order is the whole argument.
+ *
+ *   1. EMAIL      free, and 66% of a typical church has one.
+ *   2. WHATSAPP   no DND register. No sender ID paperwork. No 8pm cutoff.
+ *                 No 160-character tax. Read more than SMS ever was.
+ *   3. SMS        the last resort. Expensive, blocked for 30 million Nigerians
+ *                 on DND, and dead between 8pm and 8am on MTN.
+ *
+ * SMS is not the default channel for a Nigerian church. It is the fallback for
+ * the people who have nothing else.
+ */
 
 /**
  * Everyone, with every fact the suppression layer needs, in ONE query.
@@ -82,9 +96,11 @@ export async function candidates(tx: Tx, personIds?: string[]): Promise<Candidat
  */
 export function decide(
   c: Candidate,
-  opts: { hasDndRoute: boolean; channel?: Channel; now?: Date; ignoreQuietHours?: boolean }
+  opts: { hasDndRoute: boolean; hasWhatsApp?: boolean; channel?: Channel;
+          now?: Date; ignoreQuietHours?: boolean }
 ): { send: boolean; reason?: Suppression; to?: string;
-     channel?: "sms" | "email"; route?: "generic" | "dnd" | "email" } {
+     channel?: "sms" | "email" | "whatsapp";
+     route?: "generic" | "dnd" | "email" | "whatsapp" } {
 
   // A "we missed you!" message to someone who died last week is damage no
   // feature repays. This is checked before ANY channel.
@@ -93,8 +109,7 @@ export function decide(
   const want = opts.channel ?? "cascade";
 
   // ---- EMAIL ----------------------------------------------------------
-  // Free, no DND, no character tax, no time window. Where a member has an
-  // email address, this is the correct channel and SMS is a waste of money.
+  // Free. Where a member has an address, anything else is a waste of money.
   const emailOk = !!c.email && c.email_consent && !c.email_suppressed;
 
   if (want === "email") {
@@ -106,6 +121,27 @@ export function decide(
 
   if (want === "cascade" && emailOk) {
     return { send: true, to: c.email!, channel: "email", route: "email" };
+  }
+
+  // ---- WHATSAPP -------------------------------------------------------
+  // No DND register. It does not exist. That single fact reaches the 30 million
+  // Nigerians the generic SMS route cannot touch at all. No sender ID paperwork,
+  // no 8pm cutoff, no character limit.
+  //
+  // A Nigerian church is ALREADY on WhatsApp. Every cell group has one. Meeting
+  // them there is not a compromise — it is where they actually are.
+  const wa = c.phone || c.phone_2;
+
+  if (want === "whatsapp") {
+    if (!wa) return { send: false, reason: "no_number" };
+    if (!c.consent) return { send: false, reason: "consent" };
+    if (c.suppressed) return { send: false, reason: "bounced" };
+    return { send: true, to: wa, channel: "whatsapp", route: "whatsapp" };
+  }
+
+  if (want === "cascade" && opts.hasWhatsApp && wa && c.consent && !c.suppressed) {
+    if (c.recent >= FREQ_CAP) return { send: false, reason: "frequency_cap" };
+    return { send: true, to: wa, channel: "whatsapp", route: "whatsapp" };
   }
 
   // ---- SMS ------------------------------------------------------------
@@ -169,6 +205,11 @@ export async function prepare(
   const sender = await senderFor(tx);
   const people = await candidates(tx, opts.personIds);
   const channel: Channel = opts.channel ?? "cascade";
+
+  // Is WhatsApp actually configured? If not, the cascade must not pretend it is
+  // — it would tell a pastor his message went by WhatsApp when nothing left.
+  const hasWhatsApp = whatsappProvider().name !== "dry-run";
+
   const t = await tx.query(
     `SELECT name, sms_opt_out_text FROM tenants WHERE id = current_tenant_id()`);
   const church = t.rows[0]?.name ?? "";
@@ -198,7 +239,7 @@ export async function prepare(
 
   const subject = opts.subject?.trim() || church;
 
-  let bySms = 0, byEmail = 0, suppressed = 0, units = 0;
+  let bySms = 0, byEmail = 0, byWa = 0, suppressed = 0, units = 0;
   const reasons: Record<string, number> = {};
 
   // WHO. Not a count — the actual names. Nobody presses "Send to 3" without
@@ -211,7 +252,7 @@ export async function prepare(
     const rendered = render(smsBody, vars);
     const emailBody = render(clean, vars);     // no "Reply STOP" in an email
     const k = count(rendered);
-    const d = decide(p, { hasDndRoute: sender.dnd, channel,
+    const d = decide(p, { hasDndRoute: sender.dnd, hasWhatsApp, channel,
                           ignoreQuietHours: opts.ignoreQuietHours });
 
     if (!d.send) {
@@ -237,6 +278,17 @@ export async function prepare(
            sender_id, body, units, encoding, route, status)
          VALUES (current_tenant_id(),$1,$2,'email',$3,$4,$5,1,'GSM7','email','queued')`,
         [campaignId, p.person_id, d.to, subject, emailBody]);
+    } else if (d.channel === "whatsapp") {
+      byWa++;
+      // WhatsApp has no character limit and no page count. Send the clean body,
+      // without the "Reply STOP" line — that is an SMS obligation, not a
+      // WhatsApp one, and WhatsApp has its own block button.
+      await tx.query(
+        `INSERT INTO messages (tenant_id, campaign_id, person_id, channel, to_address,
+           sender_id, body, units, encoding, route, status)
+         VALUES (current_tenant_id(),$1,$2,'whatsapp',$3,$4,$5,1,'GSM7','whatsapp','queued')`,
+        [campaignId, p.person_id, d.to,
+         process.env.TERMII_WHATSAPP_FROM ?? church, emailBody]);
     } else {
       bySms++;
       units += k.units;   // only SMS costs units
@@ -249,7 +301,7 @@ export async function prepare(
     }
   }
 
-  const queued = bySms + byEmail;
+  const queued = bySms + byEmail + byWa;
   await tx.query(
     `UPDATE campaigns SET recipients=$2, suppressed=$3, queued=$4, units=$5 WHERE id=$1`,
     [campaignId, people.length, suppressed, queued, units]);
@@ -257,7 +309,7 @@ export async function prepare(
   // What the church would have paid on SMS alone — this is the number that
   // makes the cascade obvious, and it belongs in front of the pastor.
   const smsOnlyUnits = people
-    .filter(p => decide(p, { hasDndRoute: sender.dnd, channel: "sms",
+    .filter(p => decide(p, { hasDndRoute: sender.dnd, hasWhatsApp: false, channel: "sms",
                              ignoreQuietHours: opts.ignoreQuietHours }).send)
     .reduce((n, p) => n + count(render(body,
       { first_name: p.first_name, church, name: p.name })).units, 0);
@@ -271,6 +323,8 @@ export async function prepare(
     queued, suppressed, units, reasons,
     by_sms: bySms,
     by_email: byEmail,
+    by_whatsapp: byWa,
+    has_whatsapp: hasWhatsApp,
     will_get: willGet,     // the actual people
     will_not: willNot,     // and the actual people who will not
     sms_only_units: smsOnlyUnits,        // the counterfactual
@@ -367,6 +421,7 @@ export async function dispatch(tx: Tx, campaignId: string, unitPrice = 4.5) {
 export async function drainQueue(batch = 50) {
   const sms = provider();
   const mail = emailProvider();
+  const wa = whatsappProvider();
   const from = process.env.EMAIL_FROM ?? "Hispren <onboarding@resend.dev>";
 
   const { rows } = await platformQuery<any>(
@@ -381,10 +436,14 @@ export async function drainQueue(batch = 50) {
 
     if (m.channel === "email") {
       // sender_id carries the subject for an email row
-      const { html, text } = renderEmail(m.church, m.body, m.brand_color || "#00C389");
+      const { html, text } = renderEmail(m.church, m.body, m.brand_color || "#1A5FD0");
       const r = await mail.send(m.to_address, from, m.sender_id || m.church, html, text);
       ok = r.ok; providerId = r.providerId; error = r.error;
       providerName = mail.name;
+    } else if (m.channel === "whatsapp") {
+      const r = await wa.send(m.to_address, m.sender_id ?? m.church, m.body);
+      ok = r.ok; providerId = r.providerId; error = r.error;
+      providerName = wa.name;
     } else {
       const r = await sms.send(m.to_address, m.sender_id ?? "Hispren", m.body,
                                (m.route ?? "generic") as any);

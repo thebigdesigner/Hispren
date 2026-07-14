@@ -5,6 +5,7 @@ import { count, toGsm7, render } from "./gsm";
 import { provider } from "./providers";
 import { drainNow } from "../platform/inproc";
 import { emailProvider } from "./providers/email";
+import { whatsappProvider } from "./providers/whatsapp";
 
 export function registerNotifyRoutes(app: FastifyInstance) {
   const auth  = { preHandler: [authenticate] };
@@ -223,6 +224,8 @@ export function registerNotifyRoutes(app: FastifyInstance) {
         sms_balance: w.rows[0] ? Number(w.rows[0].balance) : 0,
         email_provider: emailProvider().name,
         email_live: emailProvider().name !== "dry-run",
+        whatsapp_provider: whatsappProvider().name,
+        whatsapp_live: whatsappProvider().name !== "dry-run",
         with_email:  Number(reach.rows[0].with_email),
         sms_only:    Number(reach.rows[0].sms_only),
         unreachable: Number(reach.rows[0].unreachable),
@@ -296,6 +299,77 @@ export function registerNotifyRoutes(app: FastifyInstance) {
    * lose a church.
    */
   app.post("/api/notify/drain", admin, async () => ({ sent: await drainNow() }));
+
+  /**
+   * THE TAP-THROUGH LIST.
+   *
+   * No API. No sender ID. No DND. No cost.
+   *
+   * Returns the people and a wa.me link for each. The secretary taps a name,
+   * WhatsApp opens with the message already written, she presses send — and it
+   * goes from THE CHURCH'S OWN NUMBER. For the 34 first-timers who need
+   * reaching this Sunday, that is not a workaround. It is better than a bulk
+   * SMS, because it is a real message from a real person.
+   *
+   * The suppression layer still applies. Free does not mean you may message
+   * somebody who told you to stop.
+   */
+  app.get<{ Params: { id: string } }>(
+    "/api/notify/campaigns/:id/tap", staff, async (req) =>
+      tenantTx(req, async (tx) => {
+        const { rows } = await tx.query(
+          `SELECT m.id, m.to_address, m.body, m.status,
+                  trim(coalesce(p.first_name,'')||' '||coalesce(p.last_name,'')) AS name
+             FROM messages m LEFT JOIN persons p ON p.id = m.person_id
+            WHERE m.campaign_id = $1 AND m.channel = 'whatsapp'
+              AND m.status IN ('queued','sent_by_hand')
+            ORDER BY (m.status = 'queued') DESC, p.first_name`, [req.params.id]);
+        return rows.map((m: any) => ({
+          ...m,
+          link: `https://wa.me/${m.to_address.replace(/[^0-9]/g, "")}` +
+                `?text=${encodeURIComponent(m.body)}`,
+          done: m.status === "sent_by_hand",
+        }));
+      }));
+
+  /** Mark one as actually sent, once she has tapped it. */
+  app.post<{ Params: { id: string } }>(
+    "/api/notify/messages/:id/sent", staff, async (req) =>
+      tenantTx(req, async (tx) => {
+        await tx.query(
+          `UPDATE messages SET status = 'sent_by_hand', sent_at = now(),
+                  provider = 'whatsapp-manual'
+            WHERE id = $1 AND channel = 'whatsapp'`, [req.params.id]);
+        return { done: true };
+      }));
+
+  /**
+   * A phone list for a WhatsApp BROADCAST LIST.
+   *
+   * WhatsApp broadcasts hold 256 people and are a native phone feature — no
+   * API, no cost, and every recipient sees it as a private message, not a group.
+   * For a whole congregation that is the cheapest bulk channel that exists.
+   */
+  app.get<{ Params: { id: string } }>(
+    "/api/notify/campaigns/:id/broadcast", staff, async (req, reply) =>
+      tenantTx(req, async (tx) => {
+        const { rows } = await tx.query(
+          `SELECT to_address FROM messages
+            WHERE campaign_id = $1 AND channel = 'whatsapp'
+              AND status IN ('queued','sent_by_hand')`, [req.params.id]);
+        const nums = rows.map((r: any) => r.to_address);
+        const chunks: string[][] = [];
+        for (let i = 0; i < nums.length; i += 256) chunks.push(nums.slice(i, i + 256));
+        return {
+          total: nums.length,
+          // 256 per broadcast list is WhatsApp's own limit, not ours.
+          lists: chunks.map((c, i) => ({
+            name: `List ${i + 1} of ${chunks.length}`,
+            count: c.length,
+            numbers: c.join(", "),
+          })),
+        };
+      }));
 
   /** Inbound STOP webhook. Instant, final, and it writes a consent event. */
   app.post<{ Body: { from?: string; sender?: string; message?: string; sms?: string } }>(

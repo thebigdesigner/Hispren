@@ -2079,6 +2079,7 @@ async function saveCare(id){
 let PREP=null;
 
 const SUPPRESS_REASON = {
+  whatsapp_failed: ['WhatsApp failed', 'The number is not on WhatsApp.'],
   consent:       ['Replied STOP', 'NDPR. Not a preference — a lawful basis.'],
   deceased:      ['Deceased', 'A "we missed you" text to someone who died is damage no feature repays.'],
   no_number:     ['No phone number', 'Neither SIM on file.'],
@@ -2149,8 +2150,29 @@ async function viewMessages(){
        rather than pretending the message went out.</div>
    </div>` : ''}
 
-   <div class="card" style="margin-bottom:16px;border-left:3px solid var(--brand)">
-     <div class="ch"><i class="ti ti-mail" style="color:var(--brand)"></i>
+   ${!st.whatsapp_live ? `<div class="card" style="margin-bottom:16px;border-left:3px solid var(--good)">
+     <div class="ch"><i class="ti ti-brand-whatsapp" style="color:var(--good)"></i>
+       <h3>WhatsApp has no DND register</h3></div>
+     <div class="muted" style="line-height:1.9">
+       This is the way out of the SMS problem, and it is worth reading twice.<br><br>
+       Over <b style="color:var(--ink)">30 million Nigerian numbers</b> are on the national
+       Do-Not-Disturb register. The generic SMS route cannot reach a single one of them —
+       ever. MTN additionally kills SMS delivery between 8pm and 8am. And a branded sender
+       ID needs CAC plus a stamped letter to each of four telcos.<br><br>
+       <b style="color:var(--ink)">WhatsApp has none of that.</b> No DND register. No sender
+       ID paperwork. No time window. No 160-character tax. And a Nigerian church is
+       <b style="color:var(--ink)">already living on WhatsApp</b> — every cell group has one,
+       and the pastor is in eleven of them.<br><br>
+       Set <b style="color:var(--ink)">WHATSAPP_TOKEN</b> and
+       <b style="color:var(--ink)">WHATSAPP_PHONE_ID</b> (Meta Cloud API, free to call), or
+       <b style="color:var(--ink)">TERMII_WHATSAPP_FROM</b> if you would rather go through
+       Termii. Then Hispren sends by email first, WhatsApp second, and only falls back to
+       SMS for the people who have neither.
+     </div>
+   </div>` : ''}
+
+   <div class="card" style="margin-bottom:16px;border-left:3px solid var(--blue)">
+     <div class="ch"><i class="ti ti-mail" style="color:var(--blue)"></i>
        <h3>Email costs nothing. Use it first.</h3></div>
      <div class="muted" style="line-height:1.85;margin-bottom:16px">
        One message to <b style="color:var(--ink)">${st.total}</b> members costs about
@@ -2195,8 +2217,13 @@ async function viewMessages(){
          ${st.dnd_route?'Reaches everyone':'DND numbers unreachable'}</div></div>
      <div class="kpi ${st.email_live?'acc':'warn'}"><div class="l">Email</div>
        <div class="v" style="font-size:19px;padding-top:9px">
-         ${st.email_live?esc(st.email_provider):'Dry run'}</div>
-       <div class="d muted">${st.email_live?'Sending':'Set RESEND_API_KEY'}</div></div>
+         ${st.email_live?'Live':'Dry run'}</div>
+       <div class="d muted">${st.email_live?esc(st.email_provider):'Set RESEND_API_KEY'}</div></div>
+     <div class="kpi ${st.whatsapp_live?'acc':'warn'}"><div class="l">WhatsApp</div>
+       <div class="v" style="font-size:19px;padding-top:9px">
+         ${st.whatsapp_live?'Live':'Not set up'}</div>
+       <div class="d" style="color:${st.whatsapp_live?'var(--good-dk)':'var(--warn-dk)'}">
+         ${st.whatsapp_live?'No DND register':'Reaches DND numbers'}</div></div>
      <div class="kpi"><div class="l">SMS credit</div>
        <div class="v">${Number(st.sms_balance).toLocaleString()}</div>
        <div class="d muted">Pages, not messages</div></div>
@@ -2498,9 +2525,10 @@ function writeStep(){
 
     <div class="field"><label>How to send it</label>
       <select id="m_ch" onchange="chanChange()">
-        <option value="cascade" selected>Email where possible, SMS for the rest — cheapest</option>
+        <option value="cascade" selected>Smart — email, then WhatsApp, then SMS</option>
         <option value="email">Email only — free</option>
-        <option value="sms">SMS only — everyone gets a text</option>
+        <option value="whatsapp">WhatsApp only — reaches DND numbers</option>
+        <option value="sms">SMS only — expensive, and blocked for 30m Nigerians</option>
       </select>
       <div class="muted" style="margin-top:7px;line-height:1.65" id="m_chnote">
         Members with an email address get an email, which costs nothing.
@@ -2564,8 +2592,18 @@ async function recount(){
   const chEl=$('#m_ch');
   if(!body){ $('#m_count').innerHTML=''; return; }
 
-  // Email has no page count and no cost. Counting characters would be a lie
-  // that pushes a pastor to write less than he means to.
+  // WhatsApp and email have no page count and no cost. Counting characters
+  // would be a lie that pushes a pastor to write less than he means to.
+  if(chEl && chEl.value==='whatsapp'){
+    $('#m_count').innerHTML=`<div style="background:var(--good-soft);
+      border:1px solid var(--good);border-radius:9px;padding:16px;
+      display:flex;justify-content:space-between;align-items:center">
+      <div><div style="font-weight:600;color:var(--ink);font-size:14px">WhatsApp</div>
+        <div class="muted" style="line-height:1.7">No character limit. No sender ID.
+          No DND. Nothing to approve.</div></div>
+      <div class="num" style="font-size:22px;color:var(--good-dk)">Free</div></div>`;
+    return;
+  }
   if(chEl && chEl.value==='email'){
     $('#m_count').innerHTML=`<div style="background:var(--brand-wash);
       border:1px solid var(--brand-soft);border-radius:9px;padding:14px;
@@ -2634,6 +2672,9 @@ function showPrepare(){
 
     <div class="kpis" style="margin-bottom:20px">
       <div class="kpi acc"><div class="l">By email — free</div><div class="v">${p.by_email||0}</div></div>
+      ${p.by_whatsapp?`<div class="kpi acc"><div class="l">By WhatsApp</div>
+        <div class="v">${p.by_whatsapp}</div>
+        <div class="d" style="color:var(--good-dk)">No DND register</div></div>`:''}
       <div class="kpi warn"><div class="l">By SMS — paid</div><div class="v">${p.by_sms||0}</div></div>
       <div class="kpi ${p.suppressed?'bad':''}"><div class="l">Will not be sent</div>
         <div class="v">${p.suppressed}</div></div>
@@ -2718,6 +2759,17 @@ function showPrepare(){
 }
 
 async function doSend(){
+  // A WhatsApp campaign is not "sent" by a server. It is tapped through by a
+  // human, and that human should be handed the list immediately.
+  if (PREP.by_whatsapp) {
+    try {
+      await api('/api/notify/send/' + PREP.campaign_id, {method:'POST'});
+    } catch(e) { /* nothing to charge — WhatsApp costs nothing */ }
+    close_();
+    tapThrough(PREP.campaign_id, PREP.by_whatsapp);
+    return;
+  }
+
   const btn = document.querySelector('.modal .btn:last-child');
   if(btn){ btn.disabled=true; btn.textContent='Sending…'; btn.style.opacity='.6'; }
   try{
@@ -3724,6 +3776,140 @@ async function changePw(){
     alert('Changed. You will need to sign in again everywhere.');
     logout();
   }catch(e){ $('#pwerr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
+}
+
+
+/* ============================ TAP THROUGH ============================ */
+/**
+ * The way around bulk SMS, and it is better than bulk SMS.
+ *
+ * No API. No sender ID. No DND register. No NCC approval. No cost.
+ *
+ * She taps a name, WhatsApp opens with the message already written, she presses
+ * send — and it goes from THE CHURCH'S OWN NUMBER. For the thirty-four
+ * first-timers who need reaching this Sunday, that is not a workaround. It is
+ * better, because it arrives as a real message from a real person, in the place
+ * a Nigerian actually reads.
+ */
+let TAP=[], TAPID=null;
+
+async function tapThrough(campaignId, total){
+  TAPID = campaignId;
+  TAP = await api(`/api/notify/campaigns/${campaignId}/tap`);
+  paintTap();
+}
+
+function paintTap(){
+  const done = TAP.filter(t=>t.done).length;
+  const left = TAP.length - done;
+  const pct  = TAP.length ? Math.round(done/TAP.length*100) : 0;
+
+  head('Send by WhatsApp', `${done} of ${TAP.length} sent`,
+    `<button class="btn btn-o" onclick="broadcastList()">Broadcast list</button>
+     <button class="btn btn-o" onclick="go('messages')">Done for now</button>`);
+
+  $('#view').innerHTML=`
+   <div class="card" style="margin-bottom:22px;border-color:var(--good)">
+     <div class="ch"><i class="ti ti-brand-whatsapp" style="color:var(--good)"></i>
+       <h3>Tap a name. Press send. That is it.</h3></div>
+     <div class="muted" style="line-height:1.85;margin-bottom:18px">
+       WhatsApp opens with the message already written, addressed to that person,
+       from <b style="color:var(--ink)">your church's own number</b>. You press send.
+       <br><br>
+       <b style="color:var(--ink)">No sender ID. No DND register. No telco. No cost.</b>
+       And it arrives where a Nigerian actually reads — beside their family, not in
+       the SMS folder they stopped opening years ago.
+     </div>
+     <div style="display:flex;align-items:center;gap:16px">
+       <div class="bar" style="height:10px">
+         <div style="width:${pct}%;background:var(--good);height:10px"></div></div>
+       <div class="num" style="font-size:20px;color:var(--ink);min-width:70px;text-align:right">
+         ${done}/${TAP.length}</div>
+     </div>
+   </div>
+
+   ${left===0?`<div class="card" style="text-align:center;padding:44px">
+     <div style="width:60px;height:60px;border-radius:50%;background:var(--good-soft);
+       display:flex;align-items:center;justify-content:center;margin:0 auto 18px">
+       <i class="ti ti-check" style="font-size:32px;color:var(--good-dk)"></i></div>
+     <div class="h" style="font-size:22px;font-weight:600">All ${TAP.length} sent</div>
+     <div class="muted" style="margin-top:8px">Every one of them, from your own number,
+       for nothing.</div>
+     <button class="btn" style="margin-top:24px" onclick="go('messages')">Done</button>
+   </div>`:''}
+
+   <div class="card">
+     ${TAP.map(t=>`<div class="li" style="${t.done?'opacity:.45':''}">
+       <div class="g" style="background:${t.done?'var(--good)':'#25D366'}">
+         <i class="ti ti-${t.done?'check':'brand-whatsapp'}"></i></div>
+       <div style="flex:1;min-width:0">
+         <div style="font-weight:600;color:var(--ink)">${esc(t.name||'—')}</div>
+         <div class="muted" style="font-variant-numeric:tabular-nums">${esc(t.to_address)}</div>
+       </div>
+       ${t.done
+         ? '<span class="tag t-g">sent</span>'
+         : `<a href="${esc(t.link)}" target="_blank" rel="noopener" class="btn"
+              style="text-decoration:none;background:#25D366"
+              onclick="markSent('${t.id}')">Open WhatsApp</a>`}
+     </div>`).join('')}
+   </div>`;
+}
+
+/**
+ * Mark it sent the moment she taps. We cannot know that she pressed send inside
+ * WhatsApp — but assuming she did, and letting her un-tick it, is far better
+ * than making her come back and confirm every single one.
+ */
+async function markSent(id){
+  await api(`/api/notify/messages/${id}/sent`,{method:'POST'});
+  const t = TAP.find(x=>x.id===id);
+  if(t) t.done = true;
+  setTimeout(paintTap, 400);
+}
+
+/**
+ * A WhatsApp BROADCAST LIST holds 256 people, is a native phone feature, costs
+ * nothing, and every recipient sees a private message rather than a group.
+ * For a whole congregation it is the cheapest bulk channel that exists.
+ */
+async function broadcastList(){
+  const b = await api(`/api/notify/campaigns/${TAPID}/broadcast`);
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div class="h" style="font-size:22px;font-weight:600">Send as a broadcast instead</div>
+    <div class="muted" style="margin:10px 0 24px;line-height:1.85">
+      A WhatsApp <b style="color:var(--ink)">broadcast list</b> is a feature of the phone in your
+      hand. It holds <b style="color:var(--ink)">256 people</b>, costs nothing, needs no approval,
+      and every recipient sees a <b style="color:var(--ink)">private message</b> — not a group
+      where they can see each other.
+      <br><br>
+      For a whole congregation this is the cheapest bulk channel that exists.
+      <br><br>
+      On your phone: <b style="color:var(--ink)">WhatsApp → Menu → New broadcast</b>, paste these
+      numbers, then send the message once.
+    </div>
+    ${b.lists.map(l=>`
+      <div class="sect">${esc(l.name)} — ${l.count} people</div>
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:8px;
+           padding:14px;font-size:13px;line-height:1.9;word-break:break-all;
+           font-family:ui-monospace,monospace;color:var(--ink);max-height:160px;overflow-y:auto">
+        ${esc(l.numbers)}</div>
+      <button class="btn btn-o" style="margin-top:10px"
+        onclick="copyNums(this,'${esc(l.numbers)}')">Copy these ${l.count}</button>
+    `).join('')}
+    <div class="muted" style="margin-top:20px;line-height:1.75">
+      A broadcast only reaches people who have <b style="color:var(--ink)">your church's number
+      saved in their phone</b>. That is WhatsApp's rule, not ours — and it is why a church
+      should put its number on the bulletin.
+    </div>
+    <button class="btn btn-o" style="width:100%;margin-top:22px" onclick="close_()">Close</button>
+  </div></div>`;
+}
+function copyNums(btn, nums){
+  navigator.clipboard.writeText(nums).then(()=>{
+    const old = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(()=>btn.textContent = old, 1600);
+  });
 }
 
 (async()=>{
