@@ -22,12 +22,31 @@ import { drainQueue, refreshDnd } from "../notify/service";
 import { runBirthdays, runServiceReminders, runMissedAttendance } from "../notify/reminders";
 import { runMeteringSnapshot, runRenewals, runDunningSweep } from "../billing/metering";
 import { platformQuery } from "./db";
+import { runDue } from "../automation/runner";
+import { consumeOutbox, sweepAbsence, sweepDates, sweepChanges, sweepSchedules,
+  sweepThresholds } from "../automation/triggers";
 
 const SEND_EVERY = 15_000;        // drain the send queue
+const RUN_EVERY  = 60_000;        // the automation sweep
 const HOUSEKEEP_EVERY = 60_000;   // check whether a daily job is due
 
 /** Jobs that must run once a day, at a given hour, Africa/Lagos. */
 const DAILY: Array<{ at: number; name: string; run: () => Promise<unknown> }> = [
+  // ── the automation engine ────────────────────────────────────────────────
+  // 05:00. Refresh the activity summary and sweep for absences BEFORE anything
+  // else touches the day — so the "she has not come for three weeks" tasks are
+  // waiting for a cell leader when he wakes up, not when he is going to bed.
+  { at: 5, name: "absence sweep", run: async () => {
+      const n = await sweepAbsence();
+      if (n) console.log(`absence: enrolled ${n}`); } },
+  // 08:00. Birthdays, anniversaries, "30 days after they joined".
+  { at: 8, name: "date sweep", run: async () => {
+      const n = await sweepDates();
+      if (n) console.log(`dates: enrolled ${n}`); } },
+  // Thresholds nightly: a cell that has gone quiet, attendance falling.
+  { at: 6, name: "threshold sweep", run: async () => {
+      const n = await sweepThresholds();
+      if (n) console.log(`thresholds: enrolled ${n}`); } },
   // 08:00 — inside the window MTN allows on the generic route.
   { at: 8,  name: "birthdays",        run: runBirthdays },
   // 15:00 the day BEFORE. NOT the evening: on the generic route MTN refuses
@@ -46,6 +65,7 @@ const DAILY: Array<{ at: number; name: string; run: () => Promise<unknown> }> = 
 
 const ranToday = new Map<string, string>();   // job -> YYYY-MM-DD
 let draining = false;
+let running = false;
 
 function lagos() {
   const s = new Date().toLocaleString("en-GB", {
@@ -81,6 +101,37 @@ export function startInProcessWorker() {
       draining = false;
     }
   }, SEND_EVERY);
+
+  // ---- the automation engine -------------------------------------------
+  //
+  // Two things, once a minute:
+  //
+  //   1. Consume the outbox. Every event Hispren has emitted since Phase 0 has
+  //      gone unread. Not any more.
+  //   2. Sweep the enrollments that are DUE. One indexed query:
+  //         WHERE status='active' AND wake_at <= now()
+  //      That index IS the architecture. A cron per workflow per church does
+  //      not survive a hundred churches, and nobody can reason about it.
+  setInterval(async () => {
+    if (running) return;
+    running = true;
+    try {
+      const ev = await consumeOutbox(200);
+      if (ev.enrolled) console.log(`events: enrolled ${ev.enrolled}`);
+      const ch = await sweepChanges();
+      if (ch) console.log(`stage changes: enrolled ${ch}`);
+      // Schedules are checked hourly, but the cron matcher only fires on the
+      // hour it is due — and last_fired_at stops it firing sixty times.
+      const sc = await sweepSchedules();
+      if (sc) console.log(`schedule: enrolled ${sc}`);
+      const n = await runDue(100);
+      if (n) console.log(`automation: ran ${n} step(s)`);
+    } catch (e: any) {
+      console.error("automation sweep failed:", e.message);
+    } finally {
+      running = false;
+    }
+  }, RUN_EVERY);
 
   // ---- daily jobs ------------------------------------------------------
   setInterval(async () => {

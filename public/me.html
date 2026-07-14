@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1A5FD0">
+<title>My Church</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.2.0/dist/tabler-icons.min.css" rel="stylesheet">
+<style>
+:root{--ink:#1A1A2E;--body:#4A4A5A;--muted:#8A8A9C;--faint:#B8B8C4;
+  --blue:#1A5FD0;--blue-dk:#134BAA;--blue-soft:#E9F0FC;--blue-wash:#F5F8FE;
+  --good:#00A868;--good-soft:#E4F7EF;--good-dk:#00794B;
+  --warn:#F5A623;--warn-soft:#FDF1E7;
+  --bad:#E5342A;--bad-soft:#FDEAE9;--bad-dk:#B0201A;
+  --line:#E2E2E8;--line2:#F0F0F4;--surface:#F7F7FA}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Inter',system-ui,sans-serif;background:#fff;color:var(--body);font-size:15px;
+  line-height:1.55;-webkit-font-smoothing:antialiased;padding-bottom:84px;
+  padding-top:env(safe-area-inset-top)}
+button{font-family:inherit;border:none;cursor:pointer}
+input,textarea,select{font-family:inherit;font-size:16px;padding:13px;border:1px solid var(--line);
+  border-radius:10px;width:100%;background:#fff;color:var(--ink)}
+input:focus,textarea:focus{outline:none;border-color:var(--blue)}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---- the card. The whole app hangs off this. ---- */
+.card{margin:16px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px}
+h1{font-size:26px;font-weight:600;color:var(--ink);letter-spacing:-.02em;padding:20px 16px 4px}
+.sub{color:var(--muted);font-size:14px;padding:0 16px 8px}
+.sect{font-size:13px;font-weight:600;color:var(--muted);padding:22px 16px 8px}
+
+.id{margin:16px;border-radius:18px;padding:24px;color:#fff;
+  background:linear-gradient(140deg,#1A5FD0,#134BAA)}
+.id .n{font-size:24px;font-weight:600;letter-spacing:-.02em}
+.id .m{font-size:14px;opacity:.85;margin-top:2px}
+.id .qr{background:#fff;border-radius:12px;padding:12px;width:168px;margin:20px auto 8px}
+.id .qr img{width:100%;display:block}
+.id .code{text-align:center;font-size:13px;opacity:.8;font-variant-numeric:tabular-nums}
+
+.li{display:flex;align-items:center;gap:13px;padding:14px 0;border-top:1px solid var(--line2)}
+.li:first-child{border-top:none}
+.li .g{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0}
+.li .g i{font-size:19px;color:#fff}
+.av{width:40px;height:40px;border-radius:50%;background:var(--surface);color:var(--ink);
+  display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;flex-shrink:0}
+.tag{font-size:12px;font-weight:600;padding:4px 10px;border-radius:14px;display:inline-block}
+.t-b{background:var(--blue-soft);color:var(--blue-dk)}
+.t-g{background:var(--good-soft);color:var(--good-dk)}
+.t-w{background:var(--warn-soft);color:#8A5A00}
+.btn{background:var(--blue);color:#fff;font-size:16px;font-weight:600;padding:15px;
+  border-radius:26px;width:100%}
+.btn-o{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.muted{color:var(--muted);font-size:13px}
+.pin{background:var(--warn-soft);border-color:var(--warn)}
+
+/* ---- offline ---- */
+.off{background:var(--warn-soft);color:#8A5A00;padding:11px 16px;font-size:13px;
+  display:none;align-items:center;gap:9px}
+.off.on{display:flex}
+
+/* ---- the tab bar ---- */
+.tabs{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);
+  display:flex;padding:8px 0 calc(8px + env(safe-area-inset-bottom));z-index:5}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px;
+  color:var(--muted);font-size:11px;font-weight:500;cursor:pointer}
+.tab i{font-size:23px}
+.tab.on{color:var(--blue)}
+
+.empty{text-align:center;padding:56px 24px;color:var(--faint);font-size:18px;font-weight:500}
+.err{background:var(--bad-soft);color:var(--bad-dk);padding:12px 15px;border-radius:10px;
+  font-size:14px;margin:16px}
+</style>
+</head>
+<body>
+
+<div class="off" id="off"><i class="ti ti-wifi-off"></i>
+  <span>No signal. Showing what was saved last time.</span></div>
+
+<div id="app"></div>
+
+<div class="tabs" id="tabs" style="display:none">
+  <div class="tab on" data-t="card" onclick="tab('card')">
+    <i class="ti ti-id"></i>My card</div>
+  <div class="tab" data-t="feed" onclick="tab('feed')">
+    <i class="ti ti-news"></i>Church</div>
+  <div class="tab" data-t="dir" onclick="tab('dir')">
+    <i class="ti ti-users"></i>Directory</div>
+  <div class="tab" data-t="pray" onclick="tab('pray')">
+    <i class="ti ti-hand-stop"></i>Prayer</div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ini=n=>(n||'?').split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// THE QR TOKEN IS THE LOGIN.
+//
+// A member does not have a password, and asking a Nigerian congregation to
+// invent and remember one is how you get forty downloads and zero logins.
+//
+// Their qr_token is already a secret UUID, already on their phone, already
+// printed on their member card, and already the thing an usher scans at the
+// gate. Losing the phone is fixed by ROTATING it — which the church can already
+// do, and which already invalidates the old card.
+// ═══════════════════════════════════════════════════════════════════════════
+let TOK = new URLSearchParams(location.search).get('t')
+       || localStorage.getItem('hispren_member');
+if (TOK) localStorage.setItem('hispren_member', TOK);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// OFFLINE READ CACHE.
+//
+// This is opened in a church car park on two bars of signal, or on a bus. Every
+// response is cached, and if the network fails we show the cache and say so
+// plainly — rather than a spinner that never resolves, which is how a member
+// decides an app is broken and never opens it again.
+// ═══════════════════════════════════════════════════════════════════════════
+const cache = {
+  get(k){ try{ return JSON.parse(localStorage.getItem('c_'+k) || 'null'); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem('c_'+k, JSON.stringify(v)); }catch(e){} },
+};
+
+let OFFLINE = false;
+
+async function api(path, opts={}){
+  const key = path.split('?')[0];
+  try{
+    const r = await fetch(path, {...opts,
+      headers:{'Content-Type':'application/json','X-Member-Token':TOK,...(opts.headers||{})}});
+    if(r.status===401){ localStorage.removeItem('hispren_member'); TOK=null; login(); throw new Error('unknown card'); }
+    const d = await r.json();
+    if(!opts.method || opts.method==='GET') cache.set(key, d);
+    setOffline(false);
+    return d;
+  }catch(e){
+    const c = cache.get(key);
+    if(c && (!opts.method || opts.method==='GET')){ setOffline(true); return c; }
+    throw e;
+  }
+}
+function setOffline(v){ OFFLINE=v; $('#off').classList.toggle('on', v); }
+addEventListener('online',  ()=>setOffline(false));
+addEventListener('offline', ()=>setOffline(true));
+
+// ═══════════════════════════════════════════════════════════════════════════
+let ME=null, TAB='card';
+
+(async()=>{
+  if(!TOK){ login(); return; }
+  try{ ME = await api('/api/me/card'); }
+  catch(e){ login(); return; }
+  $('#tabs').style.display='flex';
+  tab('card');
+})();
+
+function login(){
+  $('#tabs').style.display='none';
+  $('#app').innerHTML=`
+    <h1 style="padding-top:60px">My Church</h1>
+    <div class="sub">Scan the QR code on your member card.</div>
+    <div class="card" style="text-align:center;padding:36px 24px">
+      <i class="ti ti-qrcode" style="font-size:64px;color:var(--faint)"></i>
+      <div style="margin-top:18px;color:var(--body);line-height:1.7">
+        Point your phone camera at the QR code on your member card, or on the
+        Hispren screen at church.<br><br>
+        <b style="color:var(--ink)">There is no password.</b> Your card IS your login.
+      </div>
+    </div>
+    <div class="muted" style="padding:0 16px;line-height:1.7">
+      Lost your phone? Tell the church office. They rotate your code and the old
+      one stops working immediately — the same way a lost bank card is cancelled.
+    </div>`;
+}
+
+function tab(t){
+  TAB=t;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on', x.dataset.t===t));
+  scrollTo(0,0);
+  ({card:vCard, feed:vFeed, dir:vDir, pray:vPray})[t]();
+}
+
+/* ─────────────────────────── MY CARD ─────────────────────────── */
+async function vCard(){
+  const att = await api('/api/me/attendance').catch(()=>[]);
+  const m = ME;
+  $('#app').innerHTML=`
+    <div class="id">
+      <div class="n">${esc(m.first_name)} ${esc(m.last_name||'')}</div>
+      <div class="m">${esc(m.church)}${m.group_name?' · '+esc(m.group_name):''}</div>
+      <div class="qr">
+        <img alt="Your member code"
+          src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(m.qr_token)}">
+      </div>
+      <div class="code">${esc(m.member_code||'')}</div>
+    </div>
+
+    <div class="card" style="display:flex;text-align:center">
+      <div style="flex:1">
+        <div class="num" style="font-size:26px;font-weight:600;color:var(--ink)">
+          ${m.attendance_streak||0}</div>
+        <div class="muted">weeks running</div>
+      </div>
+      <div style="width:1px;background:var(--line2)"></div>
+      <div style="flex:1">
+        <div class="num" style="font-size:26px;font-weight:600;color:var(--ink)">
+          ${att.length}</div>
+        <div class="muted">times seen</div>
+      </div>
+      <div style="width:1px;background:var(--line2)"></div>
+      <div style="flex:1">
+        <div style="font-size:15px;font-weight:600;color:var(--ink);padding-top:6px">
+          ${esc((m.usual_service||'—').replace(' Service',''))}</div>
+        <div class="muted">your service</div>
+      </div>
+    </div>
+
+    <div class="sect">Last seen</div>
+    <div class="card">
+      ${att.slice(0,6).map(a=>`<div class="li">
+        <div class="g" style="background:var(--good)"><i class="ti ti-check"></i></div>
+        <div style="flex:1">
+          <div style="font-weight:600;color:var(--ink)">${esc(a.service)}</div>
+          <div class="muted">${new Date(a.session_date).toLocaleDateString('en-GB',
+            {weekday:'long',day:'numeric',month:'long'})}</div>
+        </div>
+      </div>`).join('')||'<div class="muted">Not yet marked present.</div>'}
+    </div>
+
+    <div class="sect">Your details</div>
+    <div class="card">
+      <div class="muted" style="line-height:1.7;margin-bottom:16px">
+        If the church has the wrong number, fix it here. It costs them nothing and
+        saves them a message that never arrives.
+      </div>
+      <div style="margin-bottom:14px"><label class="muted">Phone</label>
+        <input id="d_phone" value="${esc(m.phone||'')}" inputmode="tel"
+          style="margin-top:6px"></div>
+      <div style="margin-bottom:18px"><label class="muted">Email</label>
+        <input id="d_email" type="email" value="${esc(m.email||'')}"
+          style="margin-top:6px"></div>
+
+      <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:14px">
+        <input type="checkbox" id="d_dir" ${m.show_in_directory?'checked':''}
+          style="width:20px;height:20px;margin-top:2px;flex-shrink:0;accent-color:var(--blue)">
+        <label for="d_dir" style="font-size:14px;line-height:1.6;color:var(--body)">
+          Show me in the church directory.
+          <span class="muted">Off unless you say so.</span></label>
+      </div>
+      <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:14px">
+        <input type="checkbox" id="d_dp" ${m.directory_phone?'checked':''}
+          style="width:20px;height:20px;margin-top:2px;flex-shrink:0;accent-color:var(--blue)">
+        <label for="d_dp" style="font-size:14px;line-height:1.6;color:var(--body)">
+          Let other members see my phone number</label>
+      </div>
+      <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:20px">
+        <input type="checkbox" id="d_de" ${m.directory_email?'checked':''}
+          style="width:20px;height:20px;margin-top:2px;flex-shrink:0;accent-color:var(--blue)">
+        <label for="d_de" style="font-size:14px;line-height:1.6;color:var(--body)">
+          Let other members see my email</label>
+      </div>
+      <button class="btn" onclick="saveMe()">Save</button>
+      <div id="saved" class="muted" style="text-align:center;margin-top:12px"></div>
+    </div>`;
+}
+
+async function saveMe(){
+  await api('/api/me/details',{method:'PATCH',body:JSON.stringify({
+    phone: $('#d_phone').value.trim() || null,
+    email: $('#d_email').value.trim() || null,
+    show_in_directory: $('#d_dir').checked,
+    directory_phone: $('#d_dp').checked,
+    directory_email: $('#d_de').checked })});
+  ME = await api('/api/me/card');
+  $('#saved').textContent = 'Saved. Thank you.';
+}
+
+/* ─────────────────────────── CHURCH ─────────────────────────── */
+async function vFeed(){
+  const f = await api('/api/me/feed').catch(()=>({announcements:[],events:[],sermons:[]}));
+  const DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+  $('#app').innerHTML=`
+    <h1>${esc(ME.church)}</h1>
+    <div class="sub">What is happening</div>
+
+    ${f.announcements.length?`
+    <div class="sect">Notices</div>
+    ${f.announcements.map(a=>`<div class="card ${a.pinned?'pin':''}">
+      <div style="font-weight:600;color:var(--ink);font-size:16px">${esc(a.title)}</div>
+      <div style="margin-top:8px;line-height:1.7;white-space:pre-wrap">${esc(a.body)}</div>
+      <div class="muted" style="margin-top:10px">
+        ${new Date(a.publish_at).toLocaleDateString('en-GB',{day:'numeric',month:'long'})}</div>
+    </div>`).join('')}`:''}
+
+    <div class="sect">Services and events</div>
+    <div class="card">
+      ${f.events.map(e=>`<div class="li">
+        <div class="g" style="background:${esc(e.colour||'#1A5FD0')}">
+          <i class="ti ti-${e.event_date?'confetti':'building-church'}"></i></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;color:var(--ink)">${esc(e.name)}</div>
+          <div class="muted">${e.event_date
+            ? new Date(e.event_date).toLocaleDateString('en-GB',
+                {weekday:'long',day:'numeric',month:'long'})
+            : DAYS[e.day_of_week]+'s'}
+            ${e.start_time?' · '+String(e.start_time).slice(0,5):''}
+            ${e.location?' · '+esc(e.location):''}</div>
+        </div>
+      </div>`).join('')||'<div class="muted">Nothing scheduled.</div>'}
+    </div>
+
+    ${f.sermons.length?`
+    <div class="sect">Sermons</div>
+    ${f.sermons.map(s=>`<div class="card">
+      <div style="font-weight:600;color:var(--ink);font-size:16px">${esc(s.title)}</div>
+      <div class="muted" style="margin-top:3px">
+        ${esc(s.preacher||'')} · ${new Date(s.preached_on).toLocaleDateString('en-GB',
+          {day:'numeric',month:'long',year:'numeric'})}</div>
+      ${s.scripture?`<div class="tag t-b" style="margin-top:10px">${esc(s.scripture)}</div>`:''}
+      ${s.summary?`<div style="margin-top:12px;line-height:1.7">${esc(s.summary)}</div>`:''}
+      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+        ${s.audio_url?`<a href="${esc(s.audio_url)}" target="_blank" class="tag t-b"
+          style="text-decoration:none;padding:8px 14px">
+          <i class="ti ti-headphones"></i> Listen</a>`:''}
+        ${s.video_url?`<a href="${esc(s.video_url)}" target="_blank" class="tag t-b"
+          style="text-decoration:none;padding:8px 14px">
+          <i class="ti ti-player-play"></i> Watch</a>`:''}
+        ${s.notes_url?`<a href="${esc(s.notes_url)}" target="_blank" class="tag t-b"
+          style="text-decoration:none;padding:8px 14px">
+          <i class="ti ti-file-text"></i> Notes</a>`:''}
+      </div>
+    </div>`).join('')}`:''}`;
+}
+
+/* ─────────────────────────── DIRECTORY ─────────────────────────── */
+async function vDir(){
+  const d = await api('/api/me/directory').catch(()=>[]);
+  $('#app').innerHTML=`
+    <h1>Directory</h1>
+    <div class="sub">${d.length} ${d.length===1?'member':'members'} have chosen to appear here</div>
+
+    <div class="card">
+      <div class="muted" style="line-height:1.75">
+        <b style="color:var(--ink)">Nobody appears here unless they said so.</b>
+        A church directory that publishes everyone's details by default is a list
+        for the wrong people. Your phone and your email are two separate choices,
+        and both are off until you turn them on.
+      </div>
+    </div>
+
+    ${d.length ? d.map(p=>`<div class="card" style="display:flex;align-items:center;gap:14px">
+      <div class="av">${ini(p.name)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;color:var(--ink)">${esc(p.name)}</div>
+        <div class="muted">${esc(p.post_held||p.group_name||'')}</div>
+      </div>
+      ${p.phone?`<a href="tel:${esc(p.phone)}" style="color:var(--blue);padding:8px">
+        <i class="ti ti-phone" style="font-size:22px"></i></a>`:''}
+      ${p.email?`<a href="mailto:${esc(p.email)}" style="color:var(--blue);padding:8px">
+        <i class="ti ti-mail" style="font-size:22px"></i></a>`:''}
+    </div>`).join('')
+    : '<div class="empty">Nobody yet.</div>'}`;
+}
+
+/* ─────────────────────────── PRAYER ─────────────────────────── */
+async function vPray(){
+  $('#app').innerHTML=`
+    <h1>Prayer</h1>
+    <div class="sub">Ask the church to pray with you</div>
+
+    <div class="card">
+      <div class="muted" style="line-height:1.75;margin-bottom:16px">
+        <b style="color:var(--ink)">Private by default.</b> Only the pastoral team see this
+        — not the noticeboard, not the WhatsApp group, not anybody else in the church.
+      </div>
+      <textarea id="p_body" rows="5" placeholder="What would you like us to pray about?"
+        style="line-height:1.6"></textarea>
+
+      <div style="display:flex;gap:12px;align-items:flex-start;margin:16px 0">
+        <input type="checkbox" id="p_anon"
+          style="width:20px;height:20px;margin-top:2px;flex-shrink:0;accent-color:var(--blue)">
+        <label for="p_anon" style="font-size:14px;line-height:1.6;color:var(--body)">
+          Do not put my name on it.
+          <span class="muted">The pastors will pray, and they will not know who asked.</span>
+        </label>
+      </div>
+
+      <button class="btn" onclick="sendPrayer()">Send it</button>
+      <div id="prayerdone" style="margin-top:14px"></div>
+    </div>`;
+}
+
+async function sendPrayer(){
+  const b = $('#p_body').value.trim();
+  if(!b) return;
+  try{
+    await api('/api/me/prayer',{method:'POST',body:JSON.stringify({
+      body:b, is_private:true, is_anonymous:$('#p_anon').checked })});
+    $('#app').innerHTML=`
+      <h1>Prayer</h1>
+      <div class="card" style="text-align:center;padding:40px 24px">
+        <div style="width:64px;height:64px;border-radius:50%;background:var(--good-soft);
+          display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
+          <i class="ti ti-check" style="font-size:34px;color:var(--good-dk)"></i></div>
+        <div style="font-size:20px;font-weight:600;color:var(--ink)">We have it</div>
+        <div class="muted" style="margin-top:10px;line-height:1.7">
+          The pastoral team will pray. Somebody may reach out — and if you would rather
+          they did not, tell them, and they will not.
+        </div>
+        <button class="btn btn-o" style="margin-top:24px" onclick="tab('pray')">
+          Send another</button>
+      </div>`;
+  }catch(e){
+    $('#prayerdone').innerHTML=`<div class="err" style="margin:0">
+      ${OFFLINE ? 'No signal. Try again when you have one — we have not lost what you wrote.'
+                : esc(e.message)}</div>`;
+  }
+}
+</script>
+</body>
+</html>

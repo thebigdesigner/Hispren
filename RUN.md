@@ -19,6 +19,8 @@
 | 11 | `009_giving.sql` | funds, counting sessions, **the restricted-fund guard** |
 | 12 | `010_users.sql` | **users, roles, invitations, account lockout** |
 | 12b | `011_whatsapp.sql` | **WhatsApp — the way around bulk SMS** |
+| 12c | `012_fixes.sql` | the frequency cap was blind to WhatsApp |
+| 12d | `013_automation.sql` | **PHASE 2 — the automation engine** |
 | 12c | `012_fixes.sql` | frequency cap must count WhatsApp too |
 | 13 | `05_seed_church.sql` | Dominion Chapel + the first login |
 | 14 | `08_go_live.sql` | SMS credit, templates, services, funds |
@@ -130,11 +132,45 @@ Nigerian church can afford to communicate at all.
 
 ---
 
+## PHASE 2 — the automation engine
+
+The hard part, stated plainly: **an absence is not an event.** "Chinedu has not
+come for three weeks" means NOTHING HAPPENED, and you cannot subscribe to
+silence. So it must be swept for — and you cannot sweep by scanning attendance
+per member per night. Hence `person_activity_summary`: one row per person,
+refreshed nightly, holding the answers the sweeps need.
+
+**Six triggers.** Event · property change · date · **absence** · schedule ·
+threshold.
+
+**Seven actions.** Send a message · **tell their cell leader** · create a task ·
+change their stage · add to a list · add to a group · wait.
+
+**The safety layer is not in the engine.** Every message a workflow sends goes
+through `prepare()` — the SAME function the compose screen uses — and therefore
+through consent, deceased, quiet hours, frequency caps, DND routing and the
+suppression list, without one line of automation-specific safety code. **It is
+not possible to build a workflow in this product that reaches somebody who opted
+out.** Not difficult. Not possible.
+
+**Eight recipes, because a blank canvas is a graveyard.** A church administrator
+is a volunteer with a day job. Hand her an empty builder and she will click
+around for four minutes, build nothing, and never come back.
+
+**Test mode.** She is about to switch on something that will message people. She
+sees WHO and WHAT THEY WOULD GET before it fires — not afterwards, in the message
+log, while her phone rings.
+
+**And the pastoral decision at the centre of it:** when somebody stops coming,
+the engine does NOT text them. It tells their **cell leader**, and says *"ring
+them, do not text."* A machine-generated "we missed you!" to somebody whose
+mother died last week, or who left after an argument with an usher, is worse than
+silence.
+
+**The machine notices. A human decides.**
+
 ## What is NOT built
 
-- **Phase 2 — the automation engine.** Every module already emits events into
-  `event_outbox`. Nothing listens yet. This is the difference between a filing
-  cabinet and an assistant.
 - **Child check-in.** Breeze's second-biggest selling point. Safety-critical.
 - **Volunteer rotas.** Who is on duty Sunday.
 - **Member self-service.** Cuts admin work AND keeps the data fresh.

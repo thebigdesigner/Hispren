@@ -246,6 +246,7 @@ input[type=color]{padding:3px;height:44px}
     <div class="nav"    data-v="giving"     onclick="go('giving')"><i class="ti ti-coins"></i>Giving</div>
     <div class="nav"    data-v="finance"    onclick="go('finance')"><i class="ti ti-report-money"></i>Finance</div>
     <div class="nav"    data-v="messages"   onclick="go('messages')"><i class="ti ti-message-2"></i>Messages</div>
+    <div class="nav"    data-v="autos"      onclick="go('autos')"><i class="ti ti-robot"></i>Automations</div>
 
     <div class="slab">Manage</div>
     <div class="nav"    data-v="lists"      onclick="go('lists')"><i class="ti ti-list-check"></i>Lists</div>
@@ -396,7 +397,7 @@ function go(v){
     home:viewHome, members:viewMembers, lists:viewLists, attendance:viewAtt,
     groups:viewGroups, families:viewFamilies, calendar:viewCal,
     followups:viewTasks, care:viewCare,
-    messages:viewMessages, reports:viewReports,
+    messages:viewMessages, autos:viewAutos, reports:viewReports,
     giving:viewGiving, finance:viewFinance, duplicates:viewDupes,
     import:viewImport, export:viewExport, users:viewUsers, settings:viewSettings,
   };
@@ -4048,6 +4049,541 @@ async function statement(id, name){
   </div></div>`;
 }
 function printStatement(){ window.print(); }
+
+
+/* ============================= AUTOMATIONS =========================== */
+let WF=null;
+const MINS = m => m===0 ? 'immediately'
+  : m < 60 ? `${m} minutes later`
+  : m < 1440 ? `${Math.round(m/60)} hour${Math.round(m/60)===1?'':'s'} later`
+  : `${Math.round(m/1440)} day${Math.round(m/1440)===1?'':'s'} later`;
+
+const ACT_ICON = {
+  send_message:'message-2', notify_leader:'user-exclamation', create_task:'checkbox',
+  change_stage:'arrow-right', add_to_list:'list-check', add_to_group:'users-group',
+  wait:'clock',
+};
+
+async function viewAutos(){
+  const d = await api('/api/automations');
+  window._TRIG = d.triggers; window._ACTS = d.actions;
+  const live = d.workflows.filter(w=>w.status==='active');
+  const running = d.workflows.reduce((a,w)=>a+(w.in_progress||0),0);
+
+  head('Automations',
+    `${live.length} running · ${running} ${running===1?'person':'people'} mid-journey`,
+    `<button class="btn btn-o" onclick="newWf()">Build one from nothing</button>`);
+
+  $('#view').innerHTML=`
+   ${d.workflows.length?`
+   <div class="sec">
+     <div class="lab">Yours</div>
+     <div class="tot">${live.length} of ${d.workflows.length} switched on</div>
+     <div class="card">
+       ${d.workflows.map(w=>`<div class="li">
+         <div class="g" style="background:${
+           w.status==='active'?'var(--good)':w.status==='paused'?'var(--warn)':'var(--faint)'}">
+           <i class="ti ti-${w.trigger_type==='absence'?'user-off':
+             w.trigger_type==='date'?'cake':w.trigger_type==='event'?'bolt':
+             w.trigger_type==='schedule'?'calendar-time':'adjustments'}"></i></div>
+         <div style="flex:1;min-width:0;cursor:pointer" onclick="openWf('${w.id}')">
+           <div style="font-weight:600;color:var(--ink)">${esc(w.name)}</div>
+           <div class="muted">${esc((window._TRIG[w.trigger_type]||{}).label||w.trigger_type)}
+             · ${w.steps} step${w.steps===1?'':'s'}
+             ${w.in_progress?` · <b style="color:var(--blue)">${w.in_progress} mid-journey</b>`:''}
+             ${w.stats_completed?` · ${w.stats_completed} finished`:''}</div>
+         </div>
+         <span class="tag ${w.status==='active'?'t-g':w.status==='paused'?'t-w':'t-n'}"
+           >${w.status}</span>
+         <i class="ti ti-chevron-right" style="color:var(--faint)" onclick="openWf('${w.id}')"></i>
+       </div>`).join('')}
+     </div>
+   </div>`:''}
+
+   <div class="sec">
+     <div class="lab">Recipes</div>
+     <div class="tot">Press <b>Use</b> and it works. Edit it afterwards, or don't.</div>
+     <div class="card" style="margin-bottom:18px">
+       <div class="muted" style="line-height:1.85">
+         A blank canvas is a graveyard. You are a volunteer with a day job, not an
+         automation engineer, and you did not come here to learn what a
+         <i>trigger</i> is.<br><br>
+         Every recipe below arrives as a <b style="color:var(--ink)">draft</b> — it will not send
+         anything to anybody until you switch it on, and you can see exactly who it would
+         reach before you do.
+       </div>
+     </div>
+     ${d.library.map(r=>{
+       const have = d.workflows.some(w=>w.recipe===r.key);
+       return `<div class="card" style="margin-bottom:14px">
+         <div style="display:flex;align-items:flex-start;gap:16px">
+           <div class="g" style="background:${r.key.includes('missed')?'var(--bad)':
+             r.key.includes('welcome')||r.key.includes('came_back')?'var(--good)':'var(--blue)'};
+             width:42px;height:42px;border-radius:50%;display:flex;align-items:center;
+             justify-content:center;flex-shrink:0">
+             <i class="ti ti-${r.key.includes('missed')?'user-off':
+               r.key.includes('birthday')?'cake':r.key.includes('gift')?'coins':
+               r.key.includes('welcome')?'door-enter':r.key.includes('came_back')?'heart':
+               r.key.includes('cell')||r.key.includes('no_cell')?'users-group':'sparkles'}"
+               style="font-size:21px;color:#fff"></i></div>
+           <div style="flex:1;min-width:0">
+             <div class="h" style="font-size:17px;font-weight:600">${esc(r.name)}</div>
+             <div class="muted" style="line-height:1.75;margin-top:5px">${esc(r.why)}</div>
+             <div class="muted" style="margin-top:8px">
+               <b style="color:var(--ink)">${esc((window._TRIG[r.trigger_type]||{}).label||r.trigger_type)}</b>
+               · ${r.steps} step${r.steps===1?'':'s'}</div>
+           </div>
+           ${have
+             ? '<span class="tag t-n" style="align-self:center">already added</span>'
+             : `<button class="btn" style="align-self:center;white-space:nowrap"
+                  onclick="useRecipe('${r.key}')">Use this</button>`}
+         </div>
+       </div>`;}).join('')}
+   </div>`;
+}
+
+async function useRecipe(key){
+  const w = await api('/api/automations/recipe',{method:'POST',
+    body:JSON.stringify({recipe:key})});
+  openWf(w.id);
+}
+
+async function openWf(id){
+  WF = await api('/api/automations/'+id);
+  const T = window._TRIG || {}, A = window._ACTS || {};
+  const active = WF.status === 'active';
+
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:20px">
+      <div style="flex:1;min-width:0">
+        <div class="h" style="font-size:22px;font-weight:600">${esc(WF.name)}</div>
+        <div class="muted" style="line-height:1.7;margin-top:5px">${esc(WF.description||'')}</div>
+      </div>
+      <span class="tag ${active?'t-g':WF.status==='paused'?'t-w':'t-n'}">${WF.status}</span>
+    </div>
+
+    ${WF.status==='draft'?`<div class="alert" style="margin-bottom:22px">
+      <i class="ti ti-alert-triangle-filled"></i>
+      <div class="t">This is a <b>draft</b>. It has never sent anything and it never will,
+        until you switch it on. <b>See who it would reach first.</b></div>
+    </div>`:''}
+
+    <div class="sect">What starts it</div>
+    <div class="li" style="border:1px solid var(--line);border-radius:10px;padding:16px;
+         border-top:1px solid var(--line)">
+      <div class="g" style="background:var(--blue)">
+        <i class="ti ti-${WF.trigger_type==='absence'?'user-off':
+          WF.trigger_type==='date'?'cake':WF.trigger_type==='event'?'bolt':'calendar-time'}"></i></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;color:var(--ink)">
+          ${esc((T[WF.trigger_type]||{}).label||WF.trigger_type)}</div>
+        <div class="muted" style="line-height:1.7">${esc((T[WF.trigger_type]||{}).how||'')}</div>
+        ${WF.trigger_type==='absence'?`<div class="muted" style="margin-top:6px">
+          <b style="color:var(--ink)">${WF.trigger_config.weeks} weeks</b> without attending
+          ${WF.trigger_config.stages?` · only ${WF.trigger_config.stages.join(', ')}`:''}</div>`:''}
+      </div>
+      <span class="tag t-n">${esc((T[WF.trigger_type]||{}).when||'')}</span>
+    </div>
+
+    <div class="sect">Then, in order</div>
+    ${(WF.steps||[]).map((s,i)=>`
+      <div style="display:flex;gap:14px;margin-bottom:14px">
+        <div style="display:flex;flex-direction:column;align-items:center">
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--blue-soft);
+            color:var(--blue-dk);display:flex;align-items:center;justify-content:center;
+            font-weight:600;font-size:13px;flex-shrink:0">${i+1}</div>
+          ${i < WF.steps.length-1?`<div style="width:2px;flex:1;background:var(--line);
+            margin:4px 0"></div>`:''}
+        </div>
+        <div style="flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;
+             padding:16px;margin-bottom:2px">
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px">
+            <i class="ti ti-${ACT_ICON[s.action_type]||'circle'}"
+               style="font-size:18px;color:var(--ink)"></i>
+            <b style="color:var(--ink);font-size:14px">
+              ${esc((A[s.action_type]||{}).label||s.action_type)}</b>
+            <span class="tag t-n" style="margin-left:auto">${MINS(s.delay_minutes)}</span>
+          </div>
+          ${s.action_config.body||s.action_config.title?`
+            <div style="background:var(--surface);border-radius:8px;padding:13px;
+                 font-size:13px;line-height:1.7;color:var(--body);white-space:pre-wrap">${
+              esc(s.action_config.title||'')}${s.action_config.title&&s.action_config.body?'\n\n':''}${
+              esc(s.action_config.body||'')}</div>`:''}
+          ${s.action_config.channel?`<div class="muted" style="margin-top:8px">
+            via <b style="color:var(--ink)">${esc(s.action_config.channel)}</b></div>`:''}
+          ${s.condition?`<div class="muted" style="margin-top:8px">
+            Only if <b style="color:var(--ink)">${esc(s.condition.field)}</b>
+            ${esc(s.condition.op)} <b style="color:var(--ink)">${
+              esc(Array.isArray(s.condition.value)?s.condition.value.join(', '):s.condition.value||'')}</b>
+          </div>`:''}
+          ${s.action_type==='notify_leader'?`<div class="muted" style="margin-top:10px;
+            line-height:1.7;padding-top:10px;border-top:1px solid var(--line2)">
+            <b style="color:var(--ink)">Not the member — their cell leader.</b>
+            A machine-generated "we missed you" to somebody whose mother died last week
+            is worse than silence. The machine notices. A human decides.</div>`:''}
+        </div>
+      </div>`).join('')||'<div class="muted">No steps. It would do nothing.</div>'}
+
+    <div class="sect">Safety</div>
+    <div class="muted" style="line-height:1.9">
+      Every message this sends goes through <b style="color:var(--ink)">the same
+      suppression layer as the compose screen</b> — consent, quiet hours, frequency caps,
+      the deceased flag, the opt-out list. <b style="color:var(--ink)">It is not possible
+      to build a workflow here that reaches somebody who opted out.</b>
+      Not difficult. Not possible.
+      ${WF.allow_reenrollment
+        ? `<br><br>Somebody can go through this again after
+           <b style="color:var(--ink)">${WF.reenroll_after_days} days</b>.`
+        : `<br><br>Each person goes through this <b style="color:var(--ink)">once, ever</b>.`}
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:28px;flex-wrap:wrap">
+      <button class="btn btn-o" style="flex:1;min-width:120px" onclick="close_()">Close</button>
+      <button class="btn btn-o" onclick="editWf('${id}')">Edit</button>
+      <button class="btn btn-o" onclick="testWf('${id}')">
+        <i class="ti ti-flask" style="vertical-align:-2px"></i> Who would this reach?</button>
+      ${active
+        ? `<button class="btn btn-o" style="color:var(--warn-dk);border-color:var(--warn)"
+             onclick="setWf('${id}','paused')">Pause it</button>`
+        : `<button class="btn" style="flex:1;min-width:140px"
+             onclick="setWf('${id}','active')">Switch it on</button>`}
+    </div>
+  </div></div>`;
+}
+
+/**
+ * TEST MODE.
+ *
+ * She is about to switch on something that will message people. She needs to see
+ * WHO, and WHAT THEY WOULD GET, before it fires — not afterwards, in the message
+ * log, while her phone is ringing.
+ */
+async function testWf(id){
+  const t = await api(`/api/automations/${id}/test`);
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div class="h" style="font-size:22px;font-weight:600">If you switched this on now</div>
+    <div class="muted" style="margin:10px 0 24px;line-height:1.8">
+      <b style="color:var(--ink)">Nothing has been sent.</b> Nothing has been created.
+      This is what <i>would</i> happen.</div>
+
+    <div class="kpis" style="margin-bottom:24px">
+      <div class="kpi acc"><div class="l">Would start with</div>
+        <div class="v">${t.would_enroll}</div>
+        <div class="d muted">${t.would_enroll===1?'person':'people'}</div></div>
+      <div class="kpi"><div class="l">Steps each</div>
+        <div class="v">${t.preview.length}</div></div>
+    </div>
+
+    ${t.would_enroll?`
+    <div class="sect">Who</div>
+    <div style="max-height:200px;overflow-y:auto;border:1px solid var(--line);border-radius:9px">
+      ${t.people.map(p=>`<div style="display:flex;align-items:center;gap:12px;padding:11px 14px;
+           border-bottom:1px solid var(--line2)">
+        <div class="av" style="width:30px;height:30px;font-size:11px">${ini(p.name)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;color:var(--ink);font-size:13px">${esc(p.name)}</div>
+          <div class="muted" style="font-variant-numeric:tabular-nums">
+            ${esc(p.email||p.phone||'cannot be reached')}
+            ${p.weeks_absent!==undefined?` · ${p.weeks_absent} weeks away`:''}
+            ${p.group_name?` · ${esc(p.group_name)}`:''}</div>
+        </div>
+      </div>`).join('')}
+      ${t.would_enroll>t.people.length?`<div class="muted" style="padding:12px 14px">
+        and ${t.would_enroll-t.people.length} more</div>`:''}
+    </div>`:`<div class="empty">Nobody, right now.</div>`}
+
+    <div class="sect">What they would get</div>
+    ${t.preview.map((s,i)=>`
+      <div style="border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:9px">
+          <div style="width:26px;height:26px;border-radius:50%;background:var(--blue-soft);
+            color:var(--blue-dk);display:flex;align-items:center;justify-content:center;
+            font-weight:600;font-size:12px">${i+1}</div>
+          <b style="color:var(--ink);font-size:14px">${esc(s.action)}</b>
+          <span class="tag t-n" style="margin-left:auto">${MINS(s.delay_minutes)}</span>
+        </div>
+        ${s.body?`<div style="background:var(--surface);border-radius:8px;padding:13px;
+          font-size:13px;line-height:1.7;white-space:pre-wrap">${esc(s.body)}</div>`:''}
+      </div>`).join('')}
+
+    <div class="alert" style="margin-top:22px">
+      <i class="ti ti-alert-triangle-filled"></i>
+      <div class="t" style="font-size:13px;line-height:1.7">${esc(t.note)}</div>
+    </div>
+
+    <button class="btn btn-o" style="width:100%;margin-top:22px"
+      onclick="openWf('${WF.id}')">Back</button>
+  </div></div>`;
+}
+
+async function setWf(id,status){
+  if(status==='active' && !confirm(
+    'Switch this on?\n\nIt will start enrolling people from now. Every message still goes '
+    + 'through consent, quiet hours and the frequency cap — but this is real.'))return;
+  try{
+    await api(`/api/automations/${id}/status`,{method:'POST',
+      body:JSON.stringify({status})});
+    close_(); go('autos');
+  }catch(e){ alert(e.message) }
+}
+
+
+/* ============================== THE BUILDER ========================== */
+/**
+ * Not a node graph. Not a canvas with arrows.
+ *
+ * A church administrator is a volunteer with a day job. A branching flowchart
+ * builder is a beautiful thing that gets used exactly once, by you, in a demo.
+ *
+ * A LIST of steps, each with an optional delay and an optional condition, does
+ * everything a church actually needs and can be understood in fifteen seconds.
+ */
+let STEPS = [];
+
+async function newWf(){
+  const w = await api('/api/automations',{method:'POST',body:JSON.stringify({
+    name:'New automation', trigger_type:'absence',
+    trigger_config:{weeks:3, stages:['member','worker','leader']} })});
+  editWf(w.id);
+}
+
+async function editWf(id){
+  WF = await api('/api/automations/'+id);
+  STEPS = JSON.parse(JSON.stringify(WF.steps || []));
+  paintBuilder();
+}
+
+function paintBuilder(){
+  const T = window._TRIG || {}, A = window._ACTS || {};
+  const tc = WF.trigger_config || {};
+
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div class="h" style="font-size:22px;font-weight:600;margin-bottom:6px">Edit</div>
+    <div class="muted" style="margin-bottom:24px;line-height:1.75">
+      ${WF.status==='active'
+        ? '<b style="color:var(--warn-dk)">This is live.</b> Saving bumps the version — '
+          + 'anybody already halfway through finishes on the OLD version. Changing the '
+          + 'message somebody is due to receive tomorrow, after they were enrolled '
+          + 'yesterday, is not an edit. It is a different workflow.'
+        : 'It is a draft. Nothing has been sent, and nothing will be until you switch it on.'}
+    </div>
+    <div id="bferr"></div>
+
+    <div class="field"><label>Name</label>
+      <input id="b_name" value="${esc(WF.name)}"></div>
+
+    <div class="sect">What starts it</div>
+    <div class="field"><label>Trigger</label>
+      <select id="b_trig" onchange="trigChange()">
+        ${Object.entries(T).map(([k,v])=>
+          `<option value="${k}" ${k===WF.trigger_type?'selected':''}>${esc(v.label)}</option>`).join('')}
+      </select>
+      <div class="muted" style="margin-top:8px;line-height:1.7" id="b_trignote"></div>
+    </div>
+    <div id="b_trigcfg"></div>
+
+    <div class="sect">Then, in order</div>
+    <div id="b_steps"></div>
+    <button class="btn btn-o" style="width:100%;margin-top:8px" onclick="addStep()">
+      + Add a step</button>
+
+    <div style="display:flex;gap:12px;margin-top:28px">
+      <button class="btn btn-o" style="flex:1" onclick="openWf('${WF.id}')">Cancel</button>
+      <button class="btn" style="flex:2" onclick="saveWf()">Save</button>
+    </div>
+  </div></div>`;
+  trigChange();
+  paintSteps();
+}
+
+function trigChange(){
+  const T = window._TRIG || {};
+  const k = $('#b_trig').value;
+  const tc = WF.trigger_config || {};
+  $('#b_trignote').innerHTML = esc((T[k]||{}).how||'') +
+    `<br><b style="color:var(--ink)">${esc((T[k]||{}).when||'')}</b>`;
+
+  const box = $('#b_trigcfg');
+  if (k === 'absence') {
+    box.innerHTML = `
+      <div class="gg2">
+        <div class="field"><label>Weeks without attending</label>
+          <input id="t_weeks" type="number" min="1" max="52" value="${tc.weeks ?? 3}"></div>
+        <div class="field"><label>Only these people</label>
+          <select id="t_stages" multiple size="4" style="height:auto">
+            ${STAGES.map(s=>`<option value="${s.key}" ${
+              (tc.stages||[]).includes(s.key)?'selected':''}>${esc(s.label)}</option>`).join('')}
+          </select></div>
+      </div>
+      <div class="muted" style="margin-top:-8px;margin-bottom:16px;line-height:1.75">
+        Leave a visitor OUT of this. Somebody who came once and never returned is not
+        <i>absent</i> — they were never yours, and chasing them is how a church looks
+        like a machine.</div>`;
+  } else if (k === 'event') {
+    const EV = ['visitor.registered','member.registered','member.stage_changed',
+                'attendance.recorded','giving.recorded','group.member_added'];
+    box.innerHTML = `<div class="field"><label>When this happens</label>
+      <select id="t_event">
+        ${EV.map(e=>`<option value="${e}" ${e===tc.event?'selected':''}>${e}</option>`).join('')}
+      </select></div>`;
+  } else if (k === 'date') {
+    box.innerHTML = `<div class="gg2">
+      <div class="field"><label>Which date</label>
+        <select id="t_field">
+          <option value="date_of_birth" ${tc.field==='date_of_birth'?'selected':''}>Their birthday</option>
+          <option value="joined_at" ${tc.field==='joined_at'?'selected':''}>The day they joined</option>
+        </select></div>
+      <div class="field"><label>Days after</label>
+        <input id="t_off" type="number" value="${tc.days_offset ?? 0}"></div>
+    </div>`;
+  } else if (k === 'schedule') {
+    box.innerHTML = `<div class="gg2">
+      <div class="field"><label>When</label>
+        <select id="t_cron">
+          <option value="0 9 * * 1" ${tc.cron==='0 9 * * 1'?'selected':''}>Every Monday, 9am</option>
+          <option value="0 9 1 * *" ${tc.cron==='0 9 1 * *'?'selected':''}>1st of the month, 9am</option>
+          <option value="0 8 * * 0" ${tc.cron==='0 8 * * 0'?'selected':''}>Every Sunday, 8am</option>
+        </select></div>
+      <div class="field"><label>About whom</label>
+        <select id="t_filter">
+          ${[['no_group','Members in no cell or department'],
+             ['never_attended','On the roll, never once present'],
+             ['first_timers','First timers'],
+             ['unreachable','Cannot be contacted at all'],
+             ['workers','Workers and leaders'],
+             ['everyone','Everyone']].map(([v,l])=>
+            `<option value="${v}" ${tc.filter===v?'selected':''}>${l}</option>`).join('')}
+        </select></div>
+    </div>`;
+  } else if (k === 'threshold') {
+    box.innerHTML = `<div class="field"><label>What crosses a line</label>
+      <select id="t_metric" onchange="paintBuilder()">
+        <option value="cell_silent" ${tc.metric==='cell_silent'?'selected':''}>
+          A cell has recorded no attendance</option>
+        <option value="attendance_drop" ${tc.metric==='attendance_drop'?'selected':''}>
+          Sunday attendance has fallen</option>
+      </select>
+      <div class="muted" style="margin-top:8px;line-height:1.75">
+        A threshold is not about a person. So it enrols the person
+        <b style="color:var(--ink)">responsible</b> — the cell leader whose cell has gone
+        quiet, the pastor whose attendance is falling.</div>
+    </div>
+    ${tc.metric==='attendance_drop'
+      ? `<div class="field"><label>Below what % of its own average</label>
+          <input id="t_pct" type="number" min="10" max="99" value="${tc.pct ?? 80}"></div>`
+      : `<div class="field"><label>Weeks of silence</label>
+          <input id="t_weeks2" type="number" min="1" value="${tc.weeks ?? 2}"></div>`}`;
+  } else {
+    box.innerHTML = '';
+  }
+}
+
+function paintSteps(){
+  const A = window._ACTS || {};
+  $('#b_steps').innerHTML = STEPS.map((s,i)=>`
+    <div style="border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div style="width:26px;height:26px;border-radius:50%;background:var(--blue-soft);
+          color:var(--blue-dk);display:flex;align-items:center;justify-content:center;
+          font-weight:600;font-size:12px">${i+1}</div>
+        <select onchange="stepField(${i},'action_type',this.value)" style="flex:1;max-width:220px">
+          ${Object.entries(A).map(([k,v])=>
+            `<option value="${k}" ${k===s.action_type?'selected':''}>${esc(v.label)}</option>`).join('')}
+        </select>
+        <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
+          <span class="muted">after</span>
+          <input type="number" min="0" value="${Math.round((s.delay_minutes||0)/60)}"
+            onchange="stepField(${i},'delay_minutes',this.value*60)"
+            style="width:70px;text-align:right">
+          <span class="muted">hours</span>
+        </div>
+        ${i>0?`<i class="ti ti-arrow-up" style="cursor:pointer;color:var(--muted)"
+          onclick="moveStep(${i},-1)"></i>`:''}
+        <i class="ti ti-x" style="cursor:pointer;color:var(--faint);font-size:19px"
+          onclick="delStep(${i})"></i>
+      </div>
+
+      <div class="muted" style="line-height:1.7;margin-bottom:12px">
+        ${esc((A[s.action_type]||{}).what||'')}</div>
+
+      ${['send_message','notify_leader','create_task'].includes(s.action_type)?`
+        ${s.action_type!=='send_message'?`
+          <div class="field"><label>Title</label>
+            <input value="${esc((s.action_config||{}).title||'')}"
+              onchange="cfgField(${i},'title',this.value)"></div>`:''}
+        <div class="field" style="margin-bottom:10px">
+          <label>${s.action_type==='send_message'?'Message':'Note'}</label>
+          <textarea rows="3" onchange="cfgField(${i},'body',this.value)"
+            style="font-family:var(--f);font-size:14px;padding:12px;border:1px solid var(--line);
+                   border-radius:8px;width:100%;resize:vertical"
+            >${esc((s.action_config||{}).body||'')}</textarea>
+          <div class="muted" style="margin-top:6px">
+            <b style="color:var(--ink)">{{first_name}}</b>
+            <b style="color:var(--ink)">{{name}}</b>
+            <b style="color:var(--ink)">{{church}}</b></div>
+        </div>
+        ${s.action_type==='send_message'?`
+          <div class="field" style="margin-bottom:0"><label>How</label>
+            <select onchange="cfgField(${i},'channel',this.value)">
+              ${['whatsapp','email','cascade','sms'].map(c=>
+                `<option value="${c}" ${c===(s.action_config||{}).channel?'selected':''}>${c}</option>`).join('')}
+            </select></div>`:''}
+      `:''}
+
+      ${s.action_type==='change_stage'?`
+        <div class="field" style="margin-bottom:0"><label>Move them to</label>
+          <select onchange="cfgField(${i},'stage',this.value)">
+            ${STAGES.map(x=>`<option value="${x.key}" ${
+              x.key===(s.action_config||{}).stage?'selected':''}>${esc(x.label)}</option>`).join('')}
+          </select></div>`:''}
+    </div>`).join('') || '<div class="muted">No steps yet. It would do nothing.</div>';
+}
+
+function addStep(){
+  STEPS.push({action_type:'send_message', action_config:{channel:'whatsapp',body:''},
+              delay_minutes:0});
+  paintSteps();
+}
+function delStep(i){ STEPS.splice(i,1); paintSteps(); }
+function moveStep(i,d){
+  const t = STEPS[i]; STEPS[i] = STEPS[i+d]; STEPS[i+d] = t; paintSteps();
+}
+function stepField(i,k,v){
+  STEPS[i][k] = k==='delay_minutes' ? Number(v) : v;
+  if(k==='action_type') STEPS[i].action_config = {channel:'whatsapp'};
+  paintSteps();
+}
+function cfgField(i,k,v){
+  STEPS[i].action_config = STEPS[i].action_config || {};
+  STEPS[i].action_config[k] = v;
+}
+
+async function saveWf(){
+  const k = $('#b_trig').value;
+  let tc = {};
+  if(k==='absence') tc = {
+    weeks: Number($('#t_weeks').value)||3,
+    stages: [...$('#t_stages').selectedOptions].map(o=>o.value) };
+  else if(k==='event')    tc = { event: $('#t_event').value };
+  else if(k==='date')     tc = { field: $('#t_field').value,
+                                 days_offset: Number($('#t_off').value)||0 };
+  else if(k==='schedule') tc = { cron: $('#t_cron').value, filter: $('#t_filter').value };
+  else if(k==='threshold'){
+    const m = $('#t_metric').value;
+    tc = m==='attendance_drop'
+      ? { metric:m, pct: Number($('#t_pct').value)||80 }
+      : { metric:m, weeks: Number($('#t_weeks2').value)||2 };
+  }
+
+  try{
+    await api('/api/automations/'+WF.id,{method:'PATCH',body:JSON.stringify({
+      name: $('#b_name').value.trim() || 'Automation',
+      trigger_config: tc })});
+    await api(`/api/automations/${WF.id}/steps`,{method:'PUT',
+      body:JSON.stringify({steps: STEPS})});
+    openWf(WF.id);
+  }catch(e){ $('#bferr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
+}
 
 (async()=>{
   const s=sessionStorage.getItem('church');

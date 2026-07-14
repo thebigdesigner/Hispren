@@ -52,6 +52,9 @@ import { registerNotifyRoutes } from "../notify/routes";
 import { registerListRoutes } from "../lists/routes";
 import { registerGivingRoutes } from "../giving/routes";
 import { registerUserRoutes } from "../users/routes";
+import { registerAutomationRoutes } from "../automation/routes";
+import { registerCellRoutes } from "../cells/routes";
+import { registerMemberAppRoutes } from "../memberapp/routes";
 import { registerCareRoutes } from "../care/routes";
 
 export function buildServer() {
@@ -161,6 +164,9 @@ export function buildServer() {
   registerListRoutes(app);
   registerGivingRoutes(app);
   registerUserRoutes(app);
+  registerAutomationRoutes(app);
+  registerCellRoutes(app);
+  registerMemberAppRoutes(app);
   registerCareRoutes(app);
 
   startInProcessWorker();
