@@ -3100,11 +3100,13 @@ async function msgFamily(id,name){
 const NGN = n => 'NGN ' + Number(n||0).toLocaleString('en-NG',{maximumFractionDigits:0});
 let BATCH=null, FUNDS=[];
 
+let PLEDGES=[];
 async function viewGiving(){
-  const [funds, batches] = await Promise.all([
+  const [funds, batches, pledges] = await Promise.all([
     api('/api/giving/funds').catch(()=>[]),
-    api('/api/giving/batches').catch(()=>[])]);
-  FUNDS = funds;
+    api('/api/giving/batches').catch(()=>[]),
+    api('/api/giving/pledges').catch(()=>[])]);
+  FUNDS = funds; PLEDGES = pledges;
   const total = funds.reduce((a,f)=>a+Number(f.balance||0),0);
   const restricted = funds.filter(f=>f.kind==='restricted')
     .reduce((a,f)=>a+Number(f.balance||0),0);
@@ -3151,6 +3153,38 @@ async function viewGiving(){
        categories, and refuse one that would take it into deficit. Not warn — refuse.
        No other church platform does this.</div>
    </div>
+
+   ${PLEDGES.length?`<div class="card" style="margin-bottom:22px">
+     <div class="ch"><i class="ti ti-hand-stop"></i><h3>Pledges</h3>
+       <button class="btn btn-o" style="margin-left:auto;padding:7px 13px;font-size:13px"
+         onclick="newPledge()">Record a pledge</button></div>
+     <div class="muted" style="line-height:1.8;margin-bottom:16px">
+       A building project runs on pledges, and a pledge is worth nothing until it
+       <b style="color:var(--ink)">arrives</b>. This is what was promised against what has
+       actually come in.</div>
+     <table><thead><tr>
+       <th>Who</th><th>Fund</th><th>Pledged</th><th>Paid</th><th>Outstanding</th><th></th>
+     </tr></thead><tbody>
+     ${PLEDGES.map(p=>`<tr onclick="openMember('${p.person_id}')">
+       <td style="font-weight:600;color:var(--ink)">${esc(p.name)}</td>
+       <td class="muted">${esc(p.fund)}</td>
+       <td class="num muted">${NGN(p.pledged)}</td>
+       <td class="num" style="color:var(--good-dk)">${NGN(p.paid)}</td>
+       <td class="num" style="color:${Number(p.outstanding)?'var(--warn-dk)':'var(--muted)'}">
+         ${NGN(p.outstanding)}</td>
+       <td style="width:130px">
+         <div class="bar"><div style="width:${p.pct}%;background:${
+           p.pct>=100?'var(--good)':p.pct>=50?'var(--blue)':'var(--warn)'}"></div></div>
+         <div class="muted" style="text-align:right;font-size:11px;margin-top:3px">${p.pct}%</div>
+       </td>
+     </tr>`).join('')}</tbody></table>
+   </div>`:`<div class="card" style="margin-bottom:22px">
+     <div class="ch"><i class="ti ti-hand-stop"></i><h3>Pledges</h3></div>
+     <div class="muted" style="line-height:1.8;margin-bottom:16px">
+       Nobody has pledged anything yet. A building project runs on pledges —
+       and a pledge is worth nothing until it arrives, which is what this tracks.</div>
+     <button class="btn" onclick="newPledge()">Record a pledge</button>
+   </div>`}
 
    <div class="card">
      <div class="ch"><i class="ti ti-cash"></i><h3>Counts</h3><span class="r">${batches.length}</span></div>
@@ -3911,6 +3945,109 @@ function copyNums(btn, nums){
     setTimeout(()=>btn.textContent = old, 1600);
   });
 }
+
+
+/* =============================== PLEDGES ============================= */
+function newPledge(){
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal"
+      style="max-width:500px">
+    <div class="h" style="font-size:22px;font-weight:600">Record a pledge</div>
+    <div class="muted" style="margin:10px 0 24px;line-height:1.8">
+      "I will give NGN 500,000 to the building over twelve months."
+      <br><br>
+      A pledge is <b style="color:var(--ink)">worth nothing until it arrives</b>. Hispren
+      counts what actually comes in against what was promised, so a pastor knows the
+      difference between a building fund and a building.</div>
+    <div id="plerr"></div>
+    <div class="field"><label>Who</label><select id="pl_p">
+      ${MEMBERS.map(m=>`<option value="${m.id}">${esc(m.full_name)}</option>`).join('')}
+    </select></div>
+    <div class="gg2">
+      <div class="field"><label>Fund</label><select id="pl_f">
+        ${FUNDS.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>How much</label>
+        <input id="pl_a" type="number" min="1" placeholder="500000"></div>
+    </div>
+    <div class="gg2">
+      <div class="field"><label>From</label>
+        <input id="pl_s" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>By when</label><input id="pl_e" type="date"></div>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:24px">
+      <button class="btn btn-o" style="flex:1" onclick="close_()">Cancel</button>
+      <button class="btn" style="flex:2" onclick="savePledge()">Record it</button>
+    </div>
+  </div></div>`;
+}
+async function savePledge(){
+  const a=Number($('#pl_a').value);
+  if(!a||a<=0){$('#plerr').innerHTML='<div class="err">How much?</div>';return}
+  try{
+    await api('/api/giving/pledges',{method:'POST',body:JSON.stringify({
+      person_id:$('#pl_p').value, fund_id:$('#pl_f').value, amount:a,
+      starts_on:$('#pl_s').value||null, ends_on:$('#pl_e').value||null })});
+    close_(); go('giving');
+  }catch(e){ $('#plerr').innerHTML=`<div class="err">${esc(e.message)}</div>` }
+}
+
+/* ========================== GIVING STATEMENT ========================= */
+/**
+ * A member who gave NGN 800,000 this year and receives nothing to show for it
+ * will notice. Every competitor issues these.
+ *
+ * NAMED GIFTS ONLY. Anonymous cash is never attributed to anybody — a product
+ * that guessed would be putting a figure on a document the member did not give.
+ */
+async function statement(id, name){
+  const year = new Date().getFullYear();
+  const s = await api(`/api/giving/statement/${id}?year=${year}`);
+  $('#modal').innerHTML=`<div class="mbg" onclick="if(event.target===this)close_()"><div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">
+      <div>
+        <div class="h" style="font-size:22px;font-weight:600">Giving statement</div>
+        <div class="muted">${esc(name)} · ${year}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="muted">Total given</div>
+        <div class="num" style="font-size:28px;color:var(--ink)">${NGN(s.total)}</div>
+      </div>
+    </div>
+
+    ${s.lines.length?`
+      <div class="sect">Every named gift</div>
+      <table><thead><tr><th>Date</th><th>Fund</th><th>How</th><th>Reference</th><th>Amount</th>
+      </tr></thead><tbody>
+      ${s.lines.map(l=>`<tr style="cursor:default">
+        <td class="muted">${new Date(l.given_on).toLocaleDateString('en-GB',
+          {day:'numeric',month:'short',year:'numeric'})}</td>
+        <td>${esc(l.fund)}</td>
+        <td class="muted">${esc(l.method)}</td>
+        <td class="muted">${esc(l.reference||'—')}</td>
+        <td class="num" style="color:var(--ink)">${NGN(l.amount)}</td>
+      </tr>`).join('')}
+      <tr style="border-top:2px solid var(--line)">
+        <td colspan="4" style="font-weight:600;color:var(--ink)">Total</td>
+        <td class="num" style="color:var(--ink);font-size:16px">${NGN(s.total)}</td>
+      </tr></tbody></table>
+
+      <div class="muted" style="margin-top:20px;line-height:1.8">
+        <b style="color:var(--ink)">Named gifts only.</b> Anonymous cash from the offering bags
+        is never attributed to anybody — putting a figure on this document that they did not
+        give would be worse than giving them nothing.</div>
+
+      <div style="display:flex;gap:12px;margin-top:24px">
+        <button class="btn btn-o" style="flex:1" onclick="close_()">Close</button>
+        <button class="btn" style="flex:1" onclick="printStatement()">Print</button>
+      </div>`
+    :`<div class="empty" style="padding:44px 20px">No named gifts this year.</div>
+      <div class="muted" style="text-align:center;line-height:1.8;margin-bottom:20px">
+        They may well have given — but into the bags, anonymously, like most people do.
+        There is nothing to attribute, and Hispren will not invent it.</div>
+      <button class="btn btn-o" style="width:100%" onclick="close_()">Close</button>`}
+  </div></div>`;
+}
+function printStatement(){ window.print(); }
 
 (async()=>{
   const s=sessionStorage.getItem('church');

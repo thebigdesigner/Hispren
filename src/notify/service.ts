@@ -424,11 +424,28 @@ export async function drainQueue(batch = 50) {
   const wa = whatsappProvider();
   const from = process.env.EMAIL_FROM ?? "Hispren <onboarding@resend.dev>";
 
+  // ══════════════════════════════════════════════════════════════════════
+  // MANUAL WHATSAPP IS NOT THIS FUNCTION'S BUSINESS.
+  //
+  // When there is no Cloud API token, WhatsApp is sent by a HUMAN tapping a
+  // wa.me link. Those rows sit in 'queued' waiting for her thumb.
+  //
+  // If the drainer picks them up it calls WhatsAppManual.send(), which returns
+  // ok:false — and every one of them is marked FAILED before she ever sees the
+  // list. The tap-through screen then comes back empty and the whole feature is
+  // dead, silently, with no error anywhere.
+  //
+  // So: leave them alone. They are hers.
+  // ══════════════════════════════════════════════════════════════════════
+  const skipWa = !wa.bulk;
+
   const { rows } = await platformQuery<any>(
     `SELECT m.id, m.channel, m.to_address, m.sender_id, m.body, m.route,
             t.name AS church, t.brand_color
        FROM messages m JOIN tenants t ON t.id = m.tenant_id
-      WHERE m.status = 'queued' ORDER BY m.queued_at LIMIT $1`, [batch]);
+      WHERE m.status = 'queued'
+        AND NOT ($2::boolean AND m.channel = 'whatsapp')
+      ORDER BY m.queued_at LIMIT $1`, [batch, skipWa]);
 
   for (const m of rows) {
     let ok = false, providerId: string | undefined, error: string | undefined;

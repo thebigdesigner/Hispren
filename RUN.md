@@ -19,6 +19,7 @@
 | 11 | `009_giving.sql` | funds, counting sessions, **the restricted-fund guard** |
 | 12 | `010_users.sql` | **users, roles, invitations, account lockout** |
 | 12b | `011_whatsapp.sql` | **WhatsApp — the way around bulk SMS** |
+| 12c | `012_fixes.sql` | frequency cap must count WhatsApp too |
 | 13 | `05_seed_church.sql` | Dominion Chapel + the first login |
 | 14 | `08_go_live.sql` | SMS credit, templates, services, funds |
 
